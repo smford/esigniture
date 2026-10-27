@@ -19,6 +19,8 @@ function injectIcons(): void {
     'svg-icon': Icons.fileCode,
     'copy-icon': Icons.copy,
     'install-icon': Icons.install,
+    'tab-draw-icon': Icons.pen,
+    'tab-type-icon': Icons.type,
   };
 
   for (const [id, svg] of Object.entries(iconMap)) {
@@ -50,6 +52,10 @@ function showToast(message: string, isError = false): void {
 
 // Initial Configuration
 const config: SignatureConfig = {
+  mode: 'draw',
+  typedText: 'Jane Doe',
+  typedFont: 'Caveat',
+  typedFontSize: 56,
   strokeColor: '#0f172a',
   strokeWidth: 3,
   backgroundColor: '',
@@ -118,6 +124,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Update UI & Document Preview
   function updateUIState(): void {
+    if (config.mode === 'type') {
+      const hasText = config.typedText.trim().length > 0;
+      btnUndo.disabled = true;
+      btnRedo.disabled = true;
+      btnClear.disabled = !hasText;
+      canvasHint.classList.add('hidden');
+
+      if (hasText) {
+        const dims = sigCanvas.getCanvasDimensions();
+        const previewSvg = generateSvg([], dims.width, dims.height, { ...config, trimWhitespace: true }, null);
+        docPreviewImg.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(previewSvg)}`;
+        docPreviewImg.style.display = 'block';
+        docPlaceholder.style.display = 'none';
+      } else {
+        docPreviewImg.style.display = 'none';
+        docPlaceholder.style.display = 'inline';
+      }
+      return;
+    }
+
     const isEmpty = sigCanvas.isEmpty();
     btnUndo.disabled = !sigCanvas.canUndo();
     btnRedo.disabled = !sigCanvas.canRedo();
@@ -139,6 +165,64 @@ document.addEventListener('DOMContentLoaded', () => {
       docPlaceholder.style.display = 'none';
     }
   }
+
+  // Mode tabs switcher
+  const modeTabDraw = document.getElementById('mode-tab-draw') as HTMLButtonElement;
+  const modeTabType = document.getElementById('mode-tab-type') as HTMLButtonElement;
+  const drawControls = document.getElementById('draw-controls') as HTMLElement;
+  const typeControls = document.getElementById('type-controls') as HTMLElement;
+
+  modeTabDraw?.addEventListener('click', () => {
+    modeTabDraw.classList.add('active');
+    modeTabType.classList.remove('active');
+    drawControls.style.display = 'flex';
+    typeControls.style.display = 'none';
+    config.mode = 'draw';
+    sigCanvas.updateConfig({ mode: 'draw' });
+    updateUIState();
+  });
+
+  modeTabType?.addEventListener('click', () => {
+    modeTabType.classList.add('active');
+    modeTabDraw.classList.remove('active');
+    drawControls.style.display = 'none';
+    typeControls.style.display = 'flex';
+    config.mode = 'type';
+    sigCanvas.updateConfig({ mode: 'type' });
+    updateUIState();
+  });
+
+  // Type controls listeners
+  const typedNameInput = document.getElementById('typed-name-input') as HTMLInputElement;
+  const fontPills = document.querySelectorAll('#font-pill-palette .font-pill');
+  const typedSizeSlider = document.getElementById('typed-size-slider') as HTMLInputElement;
+  const typedSizeVal = document.getElementById('typed-size-val') as HTMLElement;
+
+  typedNameInput?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    config.typedText = val;
+    sigCanvas.updateConfig({ typedText: val });
+    updateUIState();
+  });
+
+  fontPills.forEach((pill) => {
+    pill.addEventListener('click', () => {
+      fontPills.forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      const font = pill.getAttribute('data-font') || 'Caveat';
+      config.typedFont = font;
+      sigCanvas.updateConfig({ typedFont: font });
+      updateUIState();
+    });
+  });
+
+  typedSizeSlider?.addEventListener('input', (e) => {
+    const val = parseInt((e.target as HTMLInputElement).value, 10);
+    typedSizeVal.textContent = `${val} px`;
+    config.typedFontSize = val;
+    sigCanvas.updateConfig({ typedFontSize: val });
+    updateUIState();
+  });
 
   // Stroke Color Palette
   const strokeSwatches = document.querySelectorAll('#stroke-color-palette .color-swatch');
@@ -245,7 +329,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Toolbar Actions
   btnUndo.addEventListener('click', () => sigCanvas.undo());
   btnRedo.addEventListener('click', () => sigCanvas.redo());
-  btnClear.addEventListener('click', () => sigCanvas.clear());
+  btnClear.addEventListener('click', () => {
+    if (config.mode === 'type') {
+      config.typedText = '';
+      if (typedNameInput) typedNameInput.value = '';
+      sigCanvas.updateConfig({ typedText: '' });
+      updateUIState();
+    } else {
+      sigCanvas.clear();
+    }
+  });
 
   // Export handlers
   async function handleExport(format: ExportFormat): Promise<void> {

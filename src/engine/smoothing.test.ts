@@ -6,7 +6,7 @@ import {
   smoothStrokePoints,
   computeBoundingBox,
 } from './smoothing';
-import { generateSvg } from './exporter';
+import { generateSvg, measureTypedSignature } from './exporter';
 import { Stroke, SignatureConfig } from '../types';
 
 describe('Smoothing Engine', () => {
@@ -111,6 +111,10 @@ describe('Smoothing Engine', () => {
     };
 
     const config: SignatureConfig = {
+      mode: 'draw',
+      typedText: '',
+      typedFont: 'Caveat',
+      typedFontSize: 56,
       strokeColor: '#1e3a8a',
       strokeWidth: 3,
       backgroundColor: '#ffffff',
@@ -129,5 +133,33 @@ describe('Smoothing Engine', () => {
     expect(svg).toContain('fill="#ffffff"');
     expect(svg).toContain('stroke="#1e3a8a"');
     expect(svg).toContain('<path d="M 50.00 50.00');
+  });
+
+  it('measures typed signature and generates typed SVG with cursive font', () => {
+    const textInfo = measureTypedSignature('John Doe', 'Caveat', 56, 400, 200, 20);
+    expect(textInfo.bbox.width).toBeGreaterThan(50);
+    expect(textInfo.bbox.height).toBeGreaterThan(20);
+
+    const typeConfig: SignatureConfig = {
+      mode: 'type',
+      typedText: 'John Doe',
+      typedFont: 'Caveat',
+      typedFontSize: 56,
+      strokeColor: '#0f172a',
+      strokeWidth: 3,
+      backgroundColor: '',
+      backgroundType: 'transparent',
+      smoothingFactor: 0.6,
+      dynamicPressure: true,
+      showBaseline: true,
+      trimWhitespace: true,
+      padding: 20,
+    };
+
+    const svg = generateSvg([], 400, 200, typeConfig, null);
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('<text');
+    expect(svg).toContain('font-family="\'Caveat\', cursive, sans-serif"');
+    expect(svg).toContain('John Doe</text>');
   });
 });

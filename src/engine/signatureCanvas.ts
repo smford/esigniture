@@ -170,6 +170,7 @@ export class SignatureCanvas {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    if (this.config.mode === 'type') return; // In type mode, canvas is controlled by text input
     if (e.button !== 0 && e.pointerType === 'mouse') return; // Left click only
 
     this.isDrawing = true;
@@ -273,6 +274,22 @@ export class SignatureCanvas {
     // Optional subtle baseline guide (rendered only on canvas, never in export)
     if (this.config.showBaseline) {
       this.drawBaselineGuide(logicalW, logicalH);
+    }
+
+    if (this.config.mode === 'type') {
+      const typed = this.config.typedText.trim();
+      if (typed) {
+        this.ctx.save();
+        this.ctx.font = `${this.config.typedFontSize}px "${this.config.typedFont}", cursive, sans-serif`;
+        this.ctx.fillStyle = this.config.strokeColor;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'alphabetic';
+        const baselineY = Math.round(logicalH * 0.70);
+        this.ctx.fillText(typed, logicalW / 2, baselineY);
+        this.ctx.restore();
+      }
+      this.ctx.restore();
+      return;
     }
 
     // Draw completed strokes

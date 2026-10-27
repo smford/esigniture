@@ -8,9 +8,56 @@ export interface ExportOptions {
   format: ExportFormat;
 }
 
-/**
- * Draws a single stroke onto a Canvas 2D context using smooth midpoint Bézier curves.
- */
+export function measureTypedSignature(
+  text: string,
+  fontFamily: string,
+  fontSize: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  padding = 20
+): { bbox: BoundingBox; x: number; y: number } {
+  let textWidth = text.length * fontSize * 0.55;
+  let actualAscent = fontSize * 0.75;
+  let actualDescent = fontSize * 0.25;
+
+  if (typeof document !== 'undefined') {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.font = `${fontSize}px "${fontFamily}", cursive, sans-serif`;
+        const metrics = ctx.measureText(text);
+        textWidth = Math.max(10, metrics.width);
+        actualAscent = metrics.actualBoundingBoxAscent || fontSize * 0.75;
+        actualDescent = metrics.actualBoundingBoxDescent || fontSize * 0.25;
+      }
+    } catch {
+      // Fallback to estimated metrics
+    }
+  }
+
+  const x = Math.max(padding + 10, (canvasWidth - textWidth) / 2);
+  const y = (canvasHeight + actualAscent - actualDescent) / 2;
+
+  const minX = Math.max(0, x - padding);
+  const minY = Math.max(0, y - actualAscent - padding);
+  const maxX = x + textWidth + padding;
+  const maxY = y + actualDescent + padding;
+
+  return {
+    bbox: {
+      minX: Math.floor(minX),
+      minY: Math.floor(minY),
+      maxX: Math.ceil(maxX),
+      maxY: Math.ceil(maxY),
+      width: Math.ceil(maxX - minX),
+      height: Math.ceil(maxY - minY),
+    },
+    x,
+    y,
+  };
+}
+
 export function drawStrokeToContext(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
@@ -27,7 +74,6 @@ export function drawStrokeToContext(
   ctx.lineJoin = 'round';
 
   if (pts.length === 1) {
-    // Single dot
     const p = pts[0];
     const r = Math.max(1, p.width / 2);
     ctx.beginPath();
@@ -47,7 +93,6 @@ export function drawStrokeToContext(
     return;
   }
 
-  // Draw continuous stroke with dynamic segment widths
   for (let i = 0; i < pts.length - 1; i++) {
     const current = pts[i];
     const next = pts[i + 1];
@@ -73,7 +118,6 @@ export function drawStrokeToContext(
     }
 
     if (i === pts.length - 2) {
-      // Connect to the final point
       const mid = getMidPoint(current, next);
       ctx.moveTo(mid.x - offsetX, mid.y - offsetY);
       ctx.lineTo(next.x - offsetX, next.y - offsetY);
@@ -85,9 +129,6 @@ export function drawStrokeToContext(
   ctx.restore();
 }
 
-/**
- * Generates clean, resolution-independent SVG markup for the given strokes.
- */
 export function generateSvg(
   strokes: Stroke[],
   width: number,
@@ -95,6 +136,31 @@ export function generateSvg(
   config: SignatureConfig,
   bbox: BoundingBox | null
 ): string {
+  if (config.mode === 'type') {
+    const typed = config.typedText.trim() || 'Signature';
+    const textInfo = measureTypedSignature(typed, config.typedFont, config.typedFontSize, width, height, config.padding);
+    const isTrimmed = config.trimWhitespace;
+    const targetWidth = isTrimmed ? textInfo.bbox.width : width;
+    const targetHeight = isTrimmed ? textInfo.bbox.height : height;
+    const viewBoxX = isTrimmed ? textInfo.bbox.minX : 0;
+    const viewBoxY = isTrimmed ? textInfo.bbox.minY : 0;
+
+    let bgElement = '';
+    if (config.backgroundType !== 'transparent' && config.backgroundColor) {
+      bgElement = `  <rect x="${viewBoxX}" y="${viewBoxY}" width="${targetWidth}" height="${targetHeight}" fill="${config.backgroundColor}" />\n`;
+    }
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBoxX} ${viewBoxY} ${targetWidth} ${targetHeight}" width="${targetWidth}" height="${targetHeight}">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&amp;family=Dancing+Script:wght@600&amp;family=Great+Vibes&amp;family=Sacramento&amp;display=swap');
+    </style>
+  </defs>
+${bgElement}  <text x="${textInfo.x}" y="${textInfo.y}" font-family="'${config.typedFont}', cursive, sans-serif" font-size="${config.typedFontSize}px" fill="${config.strokeColor}">${typed}</text>
+</svg>`;
+  }
+
   const isTrimmed = config.trimWhitespace && bbox !== null;
   const targetWidth = isTrimmed ? bbox.width : width;
   const targetHeight = isTrimmed ? bbox.height : height;
@@ -147,9 +213,6 @@ export function generateSvg(
 ${bgElement}${paths}</svg>`;
 }
 
-/**
- * Creates an offscreen rendered canvas for raster exports (PNG, JPEG, WebP).
- */
 export function renderToOffscreenCanvas(
   strokes: Stroke[],
   originalWidth: number,
@@ -157,15 +220,25 @@ export function renderToOffscreenCanvas(
   config: SignatureConfig,
   bbox: BoundingBox | null
 ): HTMLCanvasElement {
-  const isTrimmed = config.trimWhitespace && bbox !== null;
-  const targetWidth = isTrimmed ? bbox.width : originalWidth;
-  const targetHeight = isTrimmed ? bbox.height : originalHeight;
-  const offsetX = isTrimmed ? bbox.minX : 0;
-  const offsetY = isTrimmed ? bbox.minY : 0;
+  let isTrimmed = config.trimWhitespace && bbox !== null;
+  let targetWidth = isTrimmed && bbox ? bbox.width : originalWidth;
+  let targetHeight = isTrimmed && bbox ? bbox.height : originalHeight;
+  let offsetX = isTrimmed && bbox ? bbox.minX : 0;
+  let offsetY = isTrimmed && bbox ? bbox.minY : 0;
+
+  let textInfo: { bbox: BoundingBox; x: number; y: number } | null = null;
+  if (config.mode === 'type') {
+    const typed = config.typedText.trim() || 'Signature';
+    textInfo = measureTypedSignature(typed, config.typedFont, config.typedFontSize, originalWidth, originalHeight, config.padding);
+    isTrimmed = config.trimWhitespace;
+    targetWidth = isTrimmed ? textInfo.bbox.width : originalWidth;
+    targetHeight = isTrimmed ? textInfo.bbox.height : originalHeight;
+    offsetX = isTrimmed ? textInfo.bbox.minX : 0;
+    offsetY = isTrimmed ? textInfo.bbox.minY : 0;
+  }
 
   const canvas = document.createElement('canvas');
-  // 2x supersampling for ultra-crisp raster exports
-  const scale = 2;
+  const scale = 2; // supersampling
   canvas.width = Math.max(1, Math.round(targetWidth * scale));
   canvas.height = Math.max(1, Math.round(targetHeight * scale));
 
@@ -174,7 +247,6 @@ export function renderToOffscreenCanvas(
 
   ctx.scale(scale, scale);
 
-  // Background
   if (config.backgroundType !== 'transparent' && config.backgroundColor) {
     ctx.fillStyle = config.backgroundColor;
     ctx.fillRect(0, 0, targetWidth, targetHeight);
@@ -182,17 +254,19 @@ export function renderToOffscreenCanvas(
     ctx.clearRect(0, 0, targetWidth, targetHeight);
   }
 
-  // Draw strokes
-  for (const stroke of strokes) {
-    drawStrokeToContext(ctx, stroke, offsetX, offsetY);
+  if (config.mode === 'type' && textInfo) {
+    ctx.font = `${config.typedFontSize}px "${config.typedFont}", cursive, sans-serif`;
+    ctx.fillStyle = config.strokeColor;
+    ctx.fillText(config.typedText.trim() || 'Signature', textInfo.x - offsetX, textInfo.y - offsetY);
+  } else {
+    for (const stroke of strokes) {
+      drawStrokeToContext(ctx, stroke, offsetX, offsetY);
+    }
   }
 
   return canvas;
 }
 
-/**
- * Downloads a Blob as a file with the given filename.
- */
 export function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -204,9 +278,6 @@ export function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/**
- * Exports the signature in the desired format.
- */
 export async function exportSignature(
   strokes: Stroke[],
   width: number,
@@ -214,11 +285,17 @@ export async function exportSignature(
   config: SignatureConfig,
   format: ExportFormat
 ): Promise<{ success: boolean; message: string }> {
-  if (strokes.length === 0) {
+  if (config.mode === 'draw' && strokes.length === 0) {
     return { success: false, message: 'Please draw a signature before downloading.' };
   }
+  if (config.mode === 'type' && !config.typedText.trim()) {
+    return { success: false, message: 'Please type your signature before downloading.' };
+  }
 
-  const bbox = computeBoundingBox(strokes, config.padding);
+  const bbox = config.mode === 'type'
+    ? measureTypedSignature(config.typedText.trim(), config.typedFont, config.typedFontSize, width, height, config.padding).bbox
+    : computeBoundingBox(strokes, config.padding);
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const baseFilename = `signature-${timestamp}`;
 
@@ -237,7 +314,6 @@ export async function exportSignature(
   if (format === 'jpeg') {
     mimeType = 'image/jpeg';
     quality = 0.95;
-    // JPEG doesn't support transparency - if transparent was chosen, default to white
     if (config.backgroundType === 'transparent') {
       const whiteCanvas = document.createElement('canvas');
       whiteCanvas.width = offscreen.width;
@@ -284,24 +360,27 @@ export async function exportSignature(
   });
 }
 
-/**
- * Copies the signature directly to the user's system clipboard as a PNG image.
- */
 export async function copySignatureToClipboard(
   strokes: Stroke[],
   width: number,
   height: number,
   config: SignatureConfig
 ): Promise<{ success: boolean; message: string }> {
-  if (strokes.length === 0) {
+  if (config.mode === 'draw' && strokes.length === 0) {
     return { success: false, message: 'Please draw a signature before copying.' };
+  }
+  if (config.mode === 'type' && !config.typedText.trim()) {
+    return { success: false, message: 'Please type your signature before copying.' };
   }
 
   if (!navigator.clipboard || !window.ClipboardItem) {
     return { success: false, message: 'Clipboard image writing is not supported by your browser.' };
   }
 
-  const bbox = computeBoundingBox(strokes, config.padding);
+  const bbox = config.mode === 'type'
+    ? measureTypedSignature(config.typedText.trim(), config.typedFont, config.typedFontSize, width, height, config.padding).bbox
+    : computeBoundingBox(strokes, config.padding);
+
   const offscreen = renderToOffscreenCanvas(strokes, width, height, config, bbox);
 
   return new Promise((resolve) => {

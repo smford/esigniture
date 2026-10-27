@@ -17,18 +17,23 @@ export interface Stroke {
   smoothedPoints: SmoothedPoint[];
   color: string;
   baseWidth: number;
-  smoothingFactor: number; // 0 to 1
+  smoothingFactor: number;
   isDynamic: boolean;
 }
 
 export type BackgroundType = 'transparent' | 'white' | 'cream' | 'dark' | 'custom';
+export type SignatureMode = 'draw' | 'type';
 
 export interface SignatureConfig {
+  mode: SignatureMode;
+  typedText: string;
+  typedFont: string;
+  typedFontSize: number;
   strokeColor: string;
   strokeWidth: number;
   backgroundColor: string;
   backgroundType: BackgroundType;
-  smoothingFactor: number; // 0 (raw) to 1 (max smooth)
+  smoothingFactor: number;
   dynamicPressure: boolean;
   showBaseline: boolean;
   trimWhitespace: boolean;
