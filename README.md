@@ -2,7 +2,7 @@
 
 > A modern, sleek, client-side digital signature studio built with TypeScript and Vite. Runs 100% in the browser with advanced trackpad/mouse curve smoothing, dynamic pen physics, and vector SVG & high-res raster export.
 
-🌐 **Live Demo:** [https://smford.github.io/esigniture/](https://smford.github.io/esigniture/)
+🌐 **Live URL:** [http://stephenford.org/esigniture/](http://stephenford.org/esigniture/) (or [https://smford.github.io/esigniture/](https://smford.github.io/esigniture/))
 
 ---
 
