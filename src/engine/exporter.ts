@@ -134,8 +134,23 @@ export function generateSvg(
   width: number,
   height: number,
   config: SignatureConfig,
-  bbox: BoundingBox | null
+  bbox: BoundingBox | null,
+  importedImage?: HTMLCanvasElement | null
 ): string {
+  if (config.mode === 'scan' && importedImage) {
+    const targetWidth = importedImage.width;
+    const targetHeight = importedImage.height;
+    let bgElement = '';
+    if (config.backgroundType !== 'transparent' && config.backgroundColor) {
+      bgElement = `  <rect width="${targetWidth}" height="${targetHeight}" fill="${config.backgroundColor}" />\n`;
+    }
+    const dataUrl = importedImage.toDataURL('image/png');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${targetWidth} ${targetHeight}" width="${targetWidth}" height="${targetHeight}">
+${bgElement}  <image href="${dataUrl}" width="${targetWidth}" height="${targetHeight}" />
+</svg>`;
+  }
+
   if (config.mode === 'type') {
     const typed = config.typedText.trim() || 'Signature';
     const textInfo = measureTypedSignature(typed, config.typedFont, config.typedFontSize, width, height, config.padding);
@@ -218,8 +233,24 @@ export function renderToOffscreenCanvas(
   originalWidth: number,
   originalHeight: number,
   config: SignatureConfig,
-  bbox: BoundingBox | null
+  bbox: BoundingBox | null,
+  importedImage?: HTMLCanvasElement | null
 ): HTMLCanvasElement {
+  if (config.mode === 'scan' && importedImage) {
+    const canvas = document.createElement('canvas');
+    canvas.width = importedImage.width;
+    canvas.height = importedImage.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not get 2D context');
+
+    if (config.backgroundType !== 'transparent' && config.backgroundColor) {
+      ctx.fillStyle = config.backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(importedImage, 0, 0);
+    return canvas;
+  }
+
   let isTrimmed = config.trimWhitespace && bbox !== null;
   let targetWidth = isTrimmed && bbox ? bbox.width : originalWidth;
   let targetHeight = isTrimmed && bbox ? bbox.height : originalHeight;
@@ -271,13 +302,14 @@ export async function getSignaturePngBlob(
   strokes: Stroke[],
   width: number,
   height: number,
-  config: SignatureConfig
+  config: SignatureConfig,
+  importedImage?: HTMLCanvasElement | null
 ): Promise<Blob | null> {
   const bbox = config.mode === 'type'
     ? measureTypedSignature(config.typedText.trim() || 'Signature', config.typedFont, config.typedFontSize, width, height, config.padding).bbox
     : computeBoundingBox(strokes, config.padding);
 
-  const offscreen = renderToOffscreenCanvas(strokes, width, height, { ...config, trimWhitespace: true }, bbox);
+  const offscreen = renderToOffscreenCanvas(strokes, width, height, { ...config, trimWhitespace: true }, bbox, importedImage);
   return new Promise((resolve) => {
     offscreen.toBlob((blob) => resolve(blob), 'image/png');
   });
@@ -299,13 +331,17 @@ export async function exportSignature(
   width: number,
   height: number,
   config: SignatureConfig,
-  format: ExportFormat
+  format: ExportFormat,
+  importedImage?: HTMLCanvasElement | null
 ): Promise<{ success: boolean; message: string }> {
   if (config.mode === 'draw' && strokes.length === 0) {
     return { success: false, message: 'Please draw a signature before downloading.' };
   }
   if (config.mode === 'type' && !config.typedText.trim()) {
     return { success: false, message: 'Please type your signature before downloading.' };
+  }
+  if (config.mode === 'scan' && !importedImage) {
+    return { success: false, message: 'Please upload and clean a signature image before downloading.' };
   }
 
   const bbox = config.mode === 'type'
@@ -316,13 +352,13 @@ export async function exportSignature(
   const baseFilename = `signature-${timestamp}`;
 
   if (format === 'svg') {
-    const svgContent = generateSvg(strokes, width, height, config, bbox);
+    const svgContent = generateSvg(strokes, width, height, config, bbox, importedImage);
     const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
     triggerDownload(blob, `${baseFilename}.svg`);
     return { success: true, message: 'Downloaded scalable SVG signature.' };
   }
 
-  const offscreen = renderToOffscreenCanvas(strokes, width, height, config, bbox);
+  const offscreen = renderToOffscreenCanvas(strokes, width, height, config, bbox, importedImage);
 
   let mimeType = 'image/png';
   let quality: number | undefined = undefined;
@@ -380,13 +416,17 @@ export async function copySignatureToClipboard(
   strokes: Stroke[],
   width: number,
   height: number,
-  config: SignatureConfig
+  config: SignatureConfig,
+  importedImage?: HTMLCanvasElement | null
 ): Promise<{ success: boolean; message: string }> {
   if (config.mode === 'draw' && strokes.length === 0) {
     return { success: false, message: 'Please draw a signature before copying.' };
   }
   if (config.mode === 'type' && !config.typedText.trim()) {
     return { success: false, message: 'Please type your signature before copying.' };
+  }
+  if (config.mode === 'scan' && !importedImage) {
+    return { success: false, message: 'Please upload and clean a signature image before copying.' };
   }
 
   if (!navigator.clipboard || !window.ClipboardItem) {
@@ -397,7 +437,7 @@ export async function copySignatureToClipboard(
     ? measureTypedSignature(config.typedText.trim(), config.typedFont, config.typedFontSize, width, height, config.padding).bbox
     : computeBoundingBox(strokes, config.padding);
 
-  const offscreen = renderToOffscreenCanvas(strokes, width, height, config, bbox);
+  const offscreen = renderToOffscreenCanvas(strokes, width, height, config, bbox, importedImage);
 
   return new Promise((resolve) => {
     offscreen.toBlob(async (blob) => {

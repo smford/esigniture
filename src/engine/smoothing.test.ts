@@ -7,6 +7,7 @@ import {
   computeBoundingBox,
 } from './smoothing';
 import { generateSvg, measureTypedSignature } from './exporter';
+import { hexToRgb } from './signatureCleaner';
 import { Stroke, SignatureConfig } from '../types';
 
 describe('Smoothing Engine', () => {
@@ -161,5 +162,12 @@ describe('Smoothing Engine', () => {
     expect(svg).toContain('<text');
     expect(svg).toContain('font-family="\'Caveat\', cursive, sans-serif"');
     expect(svg).toContain('John Doe</text>');
+  });
+
+  it('converts hex colors to RGB accurately for signature cleaner', () => {
+    expect(hexToRgb('#ffffff')).toEqual({ r: 255, g: 255, b: 255 });
+    expect(hexToRgb('#000000')).toEqual({ r: 0, g: 0, b: 0 });
+    expect(hexToRgb('#0f172a')).toEqual({ r: 15, g: 23, b: 42 });
+    expect(hexToRgb('1e3a8a')).toEqual({ r: 30, g: 58, b: 138 });
   });
 });

@@ -22,7 +22,7 @@ export interface Stroke {
 }
 
 export type BackgroundType = 'transparent' | 'white' | 'cream' | 'dark' | 'custom';
-export type SignatureMode = 'draw' | 'type';
+export type SignatureMode = 'draw' | 'type' | 'scan';
 
 export interface SignatureConfig {
   mode: SignatureMode;

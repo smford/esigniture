@@ -16,6 +16,11 @@
   - Upload any PDF contract, agreement, or form.
   - Choose target page (Page 1 through N), position (Bottom Right, Bottom Left, Bottom Center), and scale.
   - Stamps and downloads the signed PDF directly in the browser—100% private, no server upload.
+- **Physical Signature Scanner & Cleaner**:
+  - Upload a smartphone photo or scan of a handwritten signature on paper.
+  - Automated adaptive thresholding removes off-white paper and camera shadows.
+  - Adjustable threshold and contrast sliders with live canvas preview.
+  - Option to recolor physical ink to match digital palettes (e.g. Classic Navy or Obsidian Black).
 - **Progressive Web App (PWA) & Offline Mode**:
   - Installable as a native standalone desktop or mobile application.
   - Fully functional offline via an automated Cache-First Service Worker (`sw.js`).

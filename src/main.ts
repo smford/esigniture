@@ -4,6 +4,7 @@ import { SignatureCanvas } from './engine/signatureCanvas';
 import { exportSignature, copySignatureToClipboard, generateSvg, getSignaturePngBlob } from './engine/exporter';
 import { computeBoundingBox } from './engine/smoothing';
 import { readPdfMetadata, stampAndDownloadPdf, PdfPlacementOptions } from './engine/pdfSigner';
+import { processSignatureImage, loadImageFromFile, CleanerOptions } from './engine/signatureCleaner';
 import { Icons } from './ui/icons';
 
 // Initialize UI Icons
@@ -22,6 +23,8 @@ function injectIcons(): void {
     'install-icon': Icons.install,
     'tab-draw-icon': Icons.pen,
     'tab-type-icon': Icons.type,
+    'tab-scan-icon': Icons.camera,
+    'scan-dropzone-icon': Icons.camera,
     'pdf-icon': Icons.filePdf,
     'modal-pdf-icon': Icons.filePdf,
     'close-pdf-icon': Icons.close,
@@ -129,6 +132,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Update UI & Document Preview
   function updateUIState(): void {
+    if (config.mode === 'scan') {
+      const imported = sigCanvas.getImportedImage();
+      btnUndo.disabled = true;
+      btnRedo.disabled = true;
+      btnClear.disabled = !imported;
+      canvasHint.classList.add('hidden');
+
+      if (imported) {
+        docPreviewImg.src = imported.toDataURL('image/png');
+        docPreviewImg.style.display = 'block';
+        docPlaceholder.style.display = 'none';
+      } else {
+        docPreviewImg.style.display = 'none';
+        docPlaceholder.style.display = 'inline';
+      }
+      return;
+    }
+
     if (config.mode === 'type') {
       const hasText = config.typedText.trim().length > 0;
       btnUndo.disabled = true;
@@ -174,14 +195,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Mode tabs switcher
   const modeTabDraw = document.getElementById('mode-tab-draw') as HTMLButtonElement;
   const modeTabType = document.getElementById('mode-tab-type') as HTMLButtonElement;
+  const modeTabScan = document.getElementById('mode-tab-scan') as HTMLButtonElement;
   const drawControls = document.getElementById('draw-controls') as HTMLElement;
   const typeControls = document.getElementById('type-controls') as HTMLElement;
+  const scanControls = document.getElementById('scan-controls') as HTMLElement;
 
   modeTabDraw?.addEventListener('click', () => {
     modeTabDraw.classList.add('active');
     modeTabType.classList.remove('active');
+    modeTabScan.classList.remove('active');
     drawControls.style.display = 'flex';
     typeControls.style.display = 'none';
+    scanControls.style.display = 'none';
     config.mode = 'draw';
     sigCanvas.updateConfig({ mode: 'draw' });
     updateUIState();
@@ -190,11 +215,112 @@ document.addEventListener('DOMContentLoaded', () => {
   modeTabType?.addEventListener('click', () => {
     modeTabType.classList.add('active');
     modeTabDraw.classList.remove('active');
+    modeTabScan.classList.remove('active');
     drawControls.style.display = 'none';
     typeControls.style.display = 'flex';
+    scanControls.style.display = 'none';
     config.mode = 'type';
     sigCanvas.updateConfig({ mode: 'type' });
     updateUIState();
+  });
+
+  modeTabScan?.addEventListener('click', () => {
+    modeTabScan.classList.add('active');
+    modeTabDraw.classList.remove('active');
+    modeTabType.classList.remove('active');
+    drawControls.style.display = 'none';
+    typeControls.style.display = 'none';
+    scanControls.style.display = 'flex';
+    config.mode = 'scan';
+    sigCanvas.updateConfig({ mode: 'scan' });
+    updateUIState();
+  });
+
+  // Scan controls listeners & processor
+  const scanFileInput = document.getElementById('scan-file-input') as HTMLInputElement;
+  const scanDropzone = document.getElementById('scan-dropzone') as HTMLElement;
+  const scanAdjustPanel = document.getElementById('scan-adjust-panel') as HTMLElement;
+  const scanThresholdSlider = document.getElementById('scan-threshold-slider') as HTMLInputElement;
+  const scanThresholdVal = document.getElementById('scan-threshold-val') as HTMLElement;
+  const scanContrastSlider = document.getElementById('scan-contrast-slider') as HTMLInputElement;
+  const scanContrastVal = document.getElementById('scan-contrast-val') as HTMLElement;
+  const scanRecolorToggle = document.getElementById('scan-recolor-toggle') as HTMLInputElement;
+
+  let loadedRawImage: HTMLImageElement | null = null;
+
+  scanDropzone?.addEventListener('click', () => scanFileInput.click());
+
+  scanDropzone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    scanDropzone.classList.add('dragover');
+  });
+
+  scanDropzone?.addEventListener('dragleave', () => {
+    scanDropzone.classList.remove('dragover');
+  });
+
+  scanDropzone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    scanDropzone.classList.remove('dragover');
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      handleScannedFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  scanFileInput?.addEventListener('change', () => {
+    if (scanFileInput.files && scanFileInput.files.length > 0) {
+      handleScannedFile(scanFileInput.files[0]);
+    }
+  });
+
+  async function handleScannedFile(file: File): Promise<void> {
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, WebP).', true);
+      return;
+    }
+    try {
+      loadedRawImage = await loadImageFromFile(file);
+      scanAdjustPanel.style.display = 'flex';
+      await reprocessScanned();
+      showToast('Signature scanned & paper removed!');
+    } catch (err) {
+      console.error(err);
+      showToast('Could not load image file.', true);
+    }
+  }
+
+  async function reprocessScanned(): Promise<void> {
+    if (!loadedRawImage) return;
+    const threshold = parseInt(scanThresholdSlider.value, 10);
+    const contrast = parseFloat(scanContrastSlider.value);
+    const replaceWithInkColor = scanRecolorToggle.checked;
+
+    const options: CleanerOptions = {
+      threshold,
+      contrast,
+      inkColor: config.strokeColor,
+      replaceWithInkColor,
+    };
+
+    const cleanedCanvas = await processSignatureImage(loadedRawImage, options);
+    sigCanvas.setImportedImage(cleanedCanvas);
+    updateUIState();
+  }
+
+  scanThresholdSlider?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    scanThresholdVal.textContent = val;
+    reprocessScanned();
+  });
+
+  scanContrastSlider?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    scanContrastVal.textContent = `${val}x`;
+    reprocessScanned();
+  });
+
+  scanRecolorToggle?.addEventListener('change', () => {
+    reprocessScanned();
   });
 
   // Type controls listeners
@@ -340,6 +466,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (typedNameInput) typedNameInput.value = '';
       sigCanvas.updateConfig({ typedText: '' });
       updateUIState();
+    } else if (config.mode === 'scan') {
+      loadedRawImage = null;
+      scanAdjustPanel.style.display = 'none';
+      sigCanvas.setImportedImage(null);
+      updateUIState();
     } else {
       sigCanvas.clear();
     }
@@ -353,7 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
       dims.width,
       dims.height,
       config,
-      format
+      format,
+      sigCanvas.getImportedImage()
     );
     showToast(result.message, !result.success);
   }
@@ -370,7 +502,8 @@ document.addEventListener('DOMContentLoaded', () => {
       sigCanvas.getStrokes(),
       dims.width,
       dims.height,
-      config
+      config,
+      sigCanvas.getImportedImage()
     );
     showToast(result.message, !result.success);
   });
@@ -484,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnStampPdf.textContent = 'Signing PDF...';
 
     const dims = sigCanvas.getCanvasDimensions();
-    const sigBlob = await getSignaturePngBlob(sigCanvas.getStrokes(), dims.width, dims.height, config);
+    const sigBlob = await getSignaturePngBlob(sigCanvas.getStrokes(), dims.width, dims.height, config, sigCanvas.getImportedImage());
 
     if (!sigBlob) {
       showToast('Failed to render signature for PDF.', true);

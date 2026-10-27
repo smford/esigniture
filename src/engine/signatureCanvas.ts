@@ -15,6 +15,7 @@ export class SignatureCanvas {
   private strokes: Stroke[] = [];
   private redoStack: Stroke[] = [];
   private currentRawPoints: Point[] = [];
+  private importedImage: HTMLCanvasElement | null = null;
   private isDrawing = false;
   private activePointerId: number | null = null;
   private onChange?: () => void;
@@ -49,8 +50,18 @@ export class SignatureCanvas {
     return [...this.strokes];
   }
 
+  public setImportedImage(img: HTMLCanvasElement | null): void {
+    this.importedImage = img;
+    this.render();
+    this.notifyChange();
+  }
+
+  public getImportedImage(): HTMLCanvasElement | null {
+    return this.importedImage;
+  }
+
   public isEmpty(): boolean {
-    return this.strokes.length === 0;
+    return this.strokes.length === 0 && !this.importedImage;
   }
 
   public canUndo(): boolean {
@@ -82,9 +93,10 @@ export class SignatureCanvas {
   }
 
   public clear(): void {
-    if (this.strokes.length === 0 && this.redoStack.length === 0) return;
+    if (this.strokes.length === 0 && this.redoStack.length === 0 && !this.importedImage) return;
     this.strokes = [];
     this.redoStack = [];
+    this.importedImage = null;
     this.render();
     this.notifyChange();
   }
@@ -274,6 +286,22 @@ export class SignatureCanvas {
     // Optional subtle baseline guide (rendered only on canvas, never in export)
     if (this.config.showBaseline) {
       this.drawBaselineGuide(logicalW, logicalH);
+    }
+
+    if (this.config.mode === 'scan' && this.importedImage) {
+      const imgW = this.importedImage.width;
+      const imgH = this.importedImage.height;
+      const maxW = logicalW * 0.85;
+      const maxH = logicalH * 0.70;
+      const scale = Math.min(maxW / imgW, maxH / imgH, 1.0);
+      const drawW = imgW * scale;
+      const drawH = imgH * scale;
+      const drawX = (logicalW - drawW) / 2;
+      const drawY = (logicalH - drawH) / 2;
+
+      this.ctx.drawImage(this.importedImage, drawX, drawY, drawW, drawH);
+      this.ctx.restore();
+      return;
     }
 
     if (this.config.mode === 'type') {

@@ -55,6 +55,50 @@
             <button id="mode-tab-type" class="mode-tab" type="button">
               <span id="tab-type-icon"></span> Type
             </button>
+            <button id="mode-tab-scan" class="mode-tab" type="button">
+              <span id="tab-scan-icon"></span> Scan
+            </button>
+          </div>
+        </div>
+
+        <!-- Scan / Photo Controls (Active when Scan mode is selected) -->
+        <div id="scan-controls" style="display: none; flex-direction: column; gap: 1rem;">
+          <input type="file" id="scan-file-input" accept="image/*" style="display: none;" />
+          <div id="scan-dropzone" class="dropzone" style="padding: 1.25rem 1rem; cursor: pointer;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.35rem;">
+              <span id="scan-dropzone-icon" style="color: var(--primary);"></span>
+              <span style="font-weight: 600; font-size: 0.88rem;">Upload Signature Photo</span>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Auto-removes paper background</span>
+            </div>
+          </div>
+
+          <div id="scan-adjust-panel" style="display: none; flex-direction: column; gap: 0.85rem;">
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Background Removal Threshold</span>
+                <span class="val" id="scan-threshold-val">190</span>
+              </div>
+              <input type="range" id="scan-threshold-slider" min="60" max="245" step="1" value="190" />
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Ink Contrast</span>
+                <span class="val" id="scan-contrast-val">1.4x</span>
+              </div>
+              <input type="range" id="scan-contrast-slider" min="0.8" max="2.6" step="0.1" value="1.4" />
+            </div>
+
+            <label class="toggle-row">
+              <div class="toggle-label">
+                <span class="title">Match Ink Palette</span>
+                <span class="desc">Recolors scanned ink to chosen color</span>
+              </div>
+              <div class="switch">
+                <input type="checkbox" id="scan-recolor-toggle" checked />
+                <span class="slider-switch"></span>
+              </div>
+            </label>
           </div>
         </div>
 
