@@ -1,0 +1,20 @@
+{
+  "name": "eSignature Studio",
+  "short_name": "eSignature",
+  "description": "Smooth, in-browser digital signature generator and vector exporter. 100% private & client-side.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090d16",
+  "theme_color": "#2563eb",
+  "categories": ["utilities", "productivity", "graphics"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
