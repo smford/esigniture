@@ -18,6 +18,7 @@ function injectIcons(): void {
     'download-icon': Icons.download,
     'svg-icon': Icons.fileCode,
     'copy-icon': Icons.copy,
+    'install-icon': Icons.install,
   };
 
   for (const [id, svg] of Object.entries(iconMap)) {
@@ -305,6 +306,64 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+
+  // PWA Install Prompt Handling
+  let deferredPrompt: any = null;
+  const btnInstall = document.getElementById('btn-install') as HTMLButtonElement | null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (btnInstall) {
+      btnInstall.style.display = 'inline-flex';
+    }
+  });
+
+  btnInstall?.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    try {
+      const choice = await deferredPrompt.userChoice;
+      if (choice && choice.outcome === 'accepted') {
+        showToast('eSignature Studio installed!');
+      }
+    } catch {
+      // Ignored
+    }
+    deferredPrompt = null;
+    btnInstall.style.display = 'none';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    if (btnInstall) btnInstall.style.display = 'none';
+    showToast('App installed successfully!');
+  });
+
+  // Offline / Online Status Listeners
+  window.addEventListener('offline', () => {
+    showToast('Offline mode active. All drawing & export features work 100% offline!');
+  });
+
+  // Service Worker Registration for PWA & Offline Support
+  if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+    navigator.serviceWorker
+      .register('./sw.js')
+      .then((reg) => {
+        reg.onupdatefound = () => {
+          const installing = reg.installing;
+          if (installing) {
+            installing.onstatechange = () => {
+              if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                showToast('Updated version ready. Refresh to update!');
+              }
+            };
+          }
+        };
+      })
+      .catch((err) => {
+        console.warn('Service Worker registration skipped or failed:', err);
+      });
+  }
 
   // Initial UI state setup
   updateUIState();

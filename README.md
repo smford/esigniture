@@ -9,6 +9,10 @@
 ## ✨ Features
 
 - **100% In-Browser & Private**: Zero data leaves your computer. No backend servers, no analytics, no external tracking.
+- **Progressive Web App (PWA) & Offline Mode**:
+  - Installable as a native standalone desktop or mobile application.
+  - Fully functional offline via an automated Cache-First Service Worker (`sw.js`).
+  - Zero-Trust Content Security Policy (CSP) enforcing strict client-side data boundaries.
 - **Advanced Jitter & Trackpad Smoothing**:
   - Sub-frame pointer precision via PointerEvent coalesced events (`getCoalescedEvents()`).
   - Distance threshold jitter filtering to remove sensor micro-tremors.
