@@ -246,6 +246,9 @@
           </div>
 
           <div>
+            <button id="btn-open-pdf-modal" class="btn" title="Upload a PDF and stamp your signature onto it (100% private in-browser)" style="margin-right: 0.5rem;">
+              <span id="pdf-icon"></span> Sign a PDF
+            </button>
             <button id="btn-copy-clipboard" class="btn" title="Copy high-res PNG to clipboard for instant pasting">
               <span id="copy-icon"></span> Copy to Clipboard
             </button>
@@ -253,6 +256,85 @@
         </div>
       </section>
     </main>
+
+    <!-- PDF Signer Modal -->
+    <div id="pdf-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span id="modal-pdf-icon" style="color: var(--primary);"></span>
+            <h2 style="font-size: 1.15rem; font-weight: 700;">Sign a PDF Document</h2>
+          </div>
+          <button id="btn-close-pdf-modal" class="icon-btn" style="border: none;" title="Close" aria-label="Close">
+            <span id="close-pdf-icon"></span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Stamp your signature directly onto any PDF document. Processed 100% in your browser—no files are ever uploaded.
+          </p>
+
+          <!-- Upload Dropzone -->
+          <div id="pdf-dropzone" class="dropzone">
+            <input type="file" id="pdf-file-input" accept="application/pdf" style="display: none;" />
+            <div id="pdf-dropzone-content" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <span id="dropzone-icon" style="color: var(--primary);"></span>
+              <span style="font-weight: 600; font-size: 0.95rem;">Click or drag PDF here to sign</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Supports standard and multi-page PDFs</span>
+            </div>
+          </div>
+
+          <!-- File configuration panel (active once PDF selected) -->
+          <div id="pdf-config-panel" style="display: none; flex-direction: column; gap: 1rem; margin-top: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--bg-card-hover); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+              <div>
+                <strong id="pdf-filename" style="font-size: 0.9rem; display: block;">document.pdf</strong>
+                <span id="pdf-page-info" style="font-size: 0.75rem; color: var(--text-muted);">1 Page</span>
+              </div>
+              <button id="btn-change-pdf" class="btn" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;">Change</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <div class="slider-group">
+                <label class="slider-header" for="pdf-page-select">
+                  <span>Target Page</span>
+                </label>
+                <select id="pdf-page-select" class="text-input" style="padding: 0.45rem;">
+                  <option value="0">Page 1</option>
+                </select>
+              </div>
+
+              <div class="slider-group">
+                <label class="slider-header" for="pdf-placement-select">
+                  <span>Signature Position</span>
+                </label>
+                <select id="pdf-placement-select" class="text-input" style="padding: 0.45rem;">
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-center">Bottom Center</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Signature Scale</span>
+                <span class="val" id="pdf-scale-val">100%</span>
+              </div>
+              <input type="range" id="pdf-scale-slider" min="0.5" max="1.8" step="0.1" value="1.0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btn-cancel-pdf" class="btn">Cancel</button>
+          <button id="btn-stamp-pdf" class="btn btn-primary" disabled>
+            <span>Stamp &amp; Download Signed PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Floating Toasts -->
     <div class="toast-container" id="toast-container"></div>

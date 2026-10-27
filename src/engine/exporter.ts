@@ -267,6 +267,22 @@ export function renderToOffscreenCanvas(
   return canvas;
 }
 
+export async function getSignaturePngBlob(
+  strokes: Stroke[],
+  width: number,
+  height: number,
+  config: SignatureConfig
+): Promise<Blob | null> {
+  const bbox = config.mode === 'type'
+    ? measureTypedSignature(config.typedText.trim() || 'Signature', config.typedFont, config.typedFontSize, width, height, config.padding).bbox
+    : computeBoundingBox(strokes, config.padding);
+
+  const offscreen = renderToOffscreenCanvas(strokes, width, height, { ...config, trimWhitespace: true }, bbox);
+  return new Promise((resolve) => {
+    offscreen.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
+
 export function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

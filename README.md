@@ -12,6 +12,10 @@
 - **Draw & Type Modes**:
   - **Draw Mode**: Freehand drawing with multi-stage curve smoothing and pen dynamics.
   - **Type to Sign Mode**: Type your name or initials and choose from curated calligraphic handwriting styles (*Caveat*, *Dancing Script*, *Great Vibes*, *Sacramento*) with adjustable sizing.
+- **In-Browser Client-Side PDF Stamping**:
+  - Upload any PDF contract, agreement, or form.
+  - Choose target page (Page 1 through N), position (Bottom Right, Bottom Left, Bottom Center), and scale.
+  - Stamps and downloads the signed PDF directly in the browser—100% private, no server upload.
 - **Progressive Web App (PWA) & Offline Mode**:
   - Installable as a native standalone desktop or mobile application.
   - Fully functional offline via an automated Cache-First Service Worker (`sw.js`).

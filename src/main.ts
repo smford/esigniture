@@ -1,8 +1,9 @@
 import './style.css';
 import { SignatureConfig, BackgroundType, ExportFormat } from './types';
 import { SignatureCanvas } from './engine/signatureCanvas';
-import { exportSignature, copySignatureToClipboard, generateSvg } from './engine/exporter';
+import { exportSignature, copySignatureToClipboard, generateSvg, getSignaturePngBlob } from './engine/exporter';
 import { computeBoundingBox } from './engine/smoothing';
+import { readPdfMetadata, stampAndDownloadPdf, PdfPlacementOptions } from './engine/pdfSigner';
 import { Icons } from './ui/icons';
 
 // Initialize UI Icons
@@ -21,6 +22,10 @@ function injectIcons(): void {
     'install-icon': Icons.install,
     'tab-draw-icon': Icons.pen,
     'tab-type-icon': Icons.type,
+    'pdf-icon': Icons.filePdf,
+    'modal-pdf-icon': Icons.filePdf,
+    'close-pdf-icon': Icons.close,
+    'dropzone-icon': Icons.filePdf,
   };
 
   for (const [id, svg] of Object.entries(iconMap)) {
@@ -368,6 +373,141 @@ document.addEventListener('DOMContentLoaded', () => {
       config
     );
     showToast(result.message, !result.success);
+  });
+
+  // PDF Signing Modal & Logic
+  const pdfModal = document.getElementById('pdf-modal') as HTMLElement;
+  const btnOpenPdfModal = document.getElementById('btn-open-pdf-modal') as HTMLButtonElement;
+  const btnClosePdfModal = document.getElementById('btn-close-pdf-modal') as HTMLButtonElement;
+  const btnCancelPdf = document.getElementById('btn-cancel-pdf') as HTMLButtonElement;
+  const pdfDropzone = document.getElementById('pdf-dropzone') as HTMLElement;
+  const pdfFileInput = document.getElementById('pdf-file-input') as HTMLInputElement;
+  const pdfConfigPanel = document.getElementById('pdf-config-panel') as HTMLElement;
+  const pdfFilename = document.getElementById('pdf-filename') as HTMLElement;
+  const pdfPageInfo = document.getElementById('pdf-page-info') as HTMLElement;
+  const btnChangePdf = document.getElementById('btn-change-pdf') as HTMLButtonElement;
+  const pdfPageSelect = document.getElementById('pdf-page-select') as HTMLSelectElement;
+  const pdfPlacementSelect = document.getElementById('pdf-placement-select') as HTMLSelectElement;
+  const pdfScaleSlider = document.getElementById('pdf-scale-slider') as HTMLInputElement;
+  const pdfScaleVal = document.getElementById('pdf-scale-val') as HTMLElement;
+  const btnStampPdf = document.getElementById('btn-stamp-pdf') as HTMLButtonElement;
+
+  let currentPdfFile: File | null = null;
+
+  btnOpenPdfModal?.addEventListener('click', () => {
+    if (config.mode === 'draw' && sigCanvas.isEmpty()) {
+      showToast('Please draw your signature first.', true);
+      return;
+    }
+    if (config.mode === 'type' && !config.typedText.trim()) {
+      showToast('Please type your signature first.', true);
+      return;
+    }
+    pdfModal.style.display = 'flex';
+  });
+
+  const closePdfModal = () => {
+    pdfModal.style.display = 'none';
+  };
+
+  btnClosePdfModal?.addEventListener('click', closePdfModal);
+  btnCancelPdf?.addEventListener('click', closePdfModal);
+
+  pdfDropzone?.addEventListener('click', () => pdfFileInput.click());
+
+  pdfDropzone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    pdfDropzone.classList.add('dragover');
+  });
+
+  pdfDropzone?.addEventListener('dragleave', () => {
+    pdfDropzone.classList.remove('dragover');
+  });
+
+  pdfDropzone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    pdfDropzone.classList.remove('dragover');
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      handlePdfSelected(e.dataTransfer.files[0]);
+    }
+  });
+
+  pdfFileInput?.addEventListener('change', () => {
+    if (pdfFileInput.files && pdfFileInput.files.length > 0) {
+      handlePdfSelected(pdfFileInput.files[0]);
+    }
+  });
+
+  btnChangePdf?.addEventListener('click', () => pdfFileInput.click());
+
+  async function handlePdfSelected(file: File): Promise<void> {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Please upload a valid .pdf file.', true);
+      return;
+    }
+
+    try {
+      const { metadata } = await readPdfMetadata(file);
+      currentPdfFile = file;
+
+      pdfFilename.textContent = metadata.filename;
+      pdfPageInfo.textContent = `${metadata.pageCount} ${metadata.pageCount === 1 ? 'Page' : 'Pages'} (${metadata.pageWidth} × ${metadata.pageHeight} pt)`;
+
+      pdfPageSelect.innerHTML = '';
+      for (let i = 0; i < metadata.pageCount; i++) {
+        const opt = document.createElement('option');
+        opt.value = i.toString();
+        opt.textContent = `Page ${i + 1}`;
+        pdfPageSelect.appendChild(opt);
+      }
+      // Default to last page (standard signature page)
+      pdfPageSelect.value = (metadata.pageCount - 1).toString();
+
+      pdfDropzone.style.display = 'none';
+      pdfConfigPanel.style.display = 'flex';
+      btnStampPdf.disabled = false;
+    } catch (err) {
+      console.error(err);
+      showToast('Could not load PDF document. Is it password protected?', true);
+    }
+  }
+
+  pdfScaleSlider?.addEventListener('input', (e) => {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    pdfScaleVal.textContent = `${Math.round(val * 100)}%`;
+  });
+
+  btnStampPdf?.addEventListener('click', async () => {
+    if (!currentPdfFile) return;
+
+    btnStampPdf.disabled = true;
+    btnStampPdf.textContent = 'Signing PDF...';
+
+    const dims = sigCanvas.getCanvasDimensions();
+    const sigBlob = await getSignaturePngBlob(sigCanvas.getStrokes(), dims.width, dims.height, config);
+
+    if (!sigBlob) {
+      showToast('Failed to render signature for PDF.', true);
+      btnStampPdf.disabled = false;
+      btnStampPdf.textContent = 'Stamp & Download Signed PDF';
+      return;
+    }
+
+    const options: PdfPlacementOptions = {
+      pageIndex: parseInt(pdfPageSelect.value, 10),
+      position: pdfPlacementSelect.value as any,
+      scale: parseFloat(pdfScaleSlider.value),
+    };
+
+    const result = await stampAndDownloadPdf(currentPdfFile, sigBlob, options);
+    showToast(result.message, !result.success);
+
+    btnStampPdf.disabled = false;
+    btnStampPdf.textContent = 'Stamp & Download Signed PDF';
+
+    if (result.success) {
+      closePdfModal();
+    }
   });
 
   // Keyboard Shortcuts
