@@ -679,11 +679,145 @@ canvas#signature-canvas {
   border-radius: var(--radius-lg);
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
   width: 100%;
-  max-width: 520px;
-  overflow: hidden;
+  max-width: 620px;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Visual PDF Placement Area */
+.pdf-page-container {
+  position: relative;
+  width: 100%;
+  max-height: 380px;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: #64748b;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  user-select: none;
+}
+
+#pdf-visual-canvas {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+  background: white;
+  display: block;
+}
+
+.pdf-sig-movable {
+  position: absolute;
+  top: 100px;
+  left: 100px;
+  width: 140px;
+  height: 60px;
+  border: 2px dashed #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-sizing: border-box;
+  touch-action: none;
+}
+
+.pdf-sig-movable:active {
+  cursor: grabbing;
+  border-color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.pdf-sig-movable img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.drag-handle-hint {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  font-size: 0.65rem;
+  background: #2563eb;
+  color: white;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Vault Items Grid */
+.vault-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.vault-item-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: var(--transition);
+}
+
+.vault-item-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+.vault-item-preview {
+  height: 65px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  padding: 0.25rem;
+}
+
+.vault-item-preview img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.vault-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vault-item-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vault-item-date {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.vault-item-actions {
+  display: flex;
+  gap: 0.35rem;
 }
 
 .modal-header {

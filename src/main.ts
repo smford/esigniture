@@ -3,8 +3,11 @@ import { SignatureConfig, BackgroundType, ExportFormat } from './types';
 import { SignatureCanvas } from './engine/signatureCanvas';
 import { exportSignature, copySignatureToClipboard, generateSvg, getSignaturePngBlob } from './engine/exporter';
 import { computeBoundingBox } from './engine/smoothing';
-import { readPdfMetadata, stampAndDownloadPdf, PdfPlacementOptions } from './engine/pdfSigner';
+import { readPdfMetadata, stampAndDownloadPdf, PdfSignOptions } from './engine/pdfSigner';
+import { renderPdfPageToCanvas } from './engine/pdfRenderer';
 import { processSignatureImage, loadImageFromFile, CleanerOptions } from './engine/signatureCleaner';
+import { getVaultItems, saveToVault, deleteFromVault } from './engine/signatureVault';
+import { generateAppQrCode } from './engine/qrGenerator';
 import { Icons } from './ui/icons';
 
 // Initialize UI Icons
@@ -29,6 +32,13 @@ function injectIcons(): void {
     'modal-pdf-icon': Icons.filePdf,
     'close-pdf-icon': Icons.close,
     'dropzone-icon': Icons.filePdf,
+    'save-icon': Icons.save,
+    'vault-icon': Icons.vault,
+    'modal-vault-icon': Icons.vault,
+    'close-vault-icon': Icons.close,
+    'qr-icon': Icons.smartphone,
+    'modal-qr-icon': Icons.smartphone,
+    'close-qr-icon': Icons.close,
   };
 
   for (const [id, svg] of Object.entries(iconMap)) {
@@ -86,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnUndo = document.getElementById('btn-undo') as HTMLButtonElement;
   const btnRedo = document.getElementById('btn-redo') as HTMLButtonElement;
   const btnClear = document.getElementById('btn-clear') as HTMLButtonElement;
+  const btnSaveVault = document.getElementById('btn-save-vault') as HTMLButtonElement | null;
 
   const strokeWidthSlider = document.getElementById('stroke-width-slider') as HTMLInputElement;
   const strokeWidthVal = document.getElementById('stroke-width-val') as HTMLElement;
@@ -137,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnUndo.disabled = true;
       btnRedo.disabled = true;
       btnClear.disabled = !imported;
+      if (btnSaveVault) btnSaveVault.disabled = !imported;
       canvasHint.classList.add('hidden');
 
       if (imported) {
@@ -155,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnUndo.disabled = true;
       btnRedo.disabled = true;
       btnClear.disabled = !hasText;
+      if (btnSaveVault) btnSaveVault.disabled = !hasText;
       canvasHint.classList.add('hidden');
 
       if (hasText) {
@@ -174,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnUndo.disabled = !sigCanvas.canUndo();
     btnRedo.disabled = !sigCanvas.canRedo();
     btnClear.disabled = isEmpty;
+    if (btnSaveVault) btnSaveVault.disabled = isEmpty;
 
     if (isEmpty) {
       canvasHint.classList.remove('hidden');
@@ -520,14 +534,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const pdfPageInfo = document.getElementById('pdf-page-info') as HTMLElement;
   const btnChangePdf = document.getElementById('btn-change-pdf') as HTMLButtonElement;
   const pdfPageSelect = document.getElementById('pdf-page-select') as HTMLSelectElement;
-  const pdfPlacementSelect = document.getElementById('pdf-placement-select') as HTMLSelectElement;
   const pdfScaleSlider = document.getElementById('pdf-scale-slider') as HTMLInputElement;
   const pdfScaleVal = document.getElementById('pdf-scale-val') as HTMLElement;
   const btnStampPdf = document.getElementById('btn-stamp-pdf') as HTMLButtonElement;
 
-  let currentPdfFile: File | null = null;
+  const pdfVisualCanvas = document.getElementById('pdf-visual-canvas') as HTMLCanvasElement;
+  const pdfSigOverlay = document.getElementById('pdf-sig-overlay') as HTMLElement;
+  const pdfSigOverlayImg = document.getElementById('pdf-sig-overlay-img') as HTMLImageElement;
 
-  btnOpenPdfModal?.addEventListener('click', () => {
+  const pdfFieldDateToggle = document.getElementById('pdf-field-date-toggle') as HTMLInputElement;
+  const pdfFieldDateInput = document.getElementById('pdf-field-date-input') as HTMLInputElement;
+  const pdfFieldNameToggle = document.getElementById('pdf-field-name-toggle') as HTMLInputElement;
+  const pdfFieldNameInput = document.getElementById('pdf-field-name-input') as HTMLInputElement;
+  const pdfAuditCertToggle = document.getElementById('pdf-audit-certificate-toggle') as HTMLInputElement;
+
+  // Initialize date input to today
+  if (pdfFieldDateInput) {
+    pdfFieldDateInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  let currentPdfFile: File | null = null;
+  let isDraggingOverlay = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let overlayStartLeft = 0;
+  let overlayStartTop = 0;
+
+  btnOpenPdfModal?.addEventListener('click', async () => {
     if (config.mode === 'draw' && sigCanvas.isEmpty()) {
       showToast('Please draw your signature first.', true);
       return;
@@ -537,6 +570,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     pdfModal.style.display = 'flex';
+
+    // Prepare preview image on the overlay
+    const dims = sigCanvas.getCanvasDimensions();
+    const sigBlob = await getSignaturePngBlob(sigCanvas.getStrokes(), dims.width, dims.height, config, sigCanvas.getImportedImage());
+    if (sigBlob) {
+      pdfSigOverlayImg.src = URL.createObjectURL(sigBlob);
+    }
   });
 
   const closePdfModal = () => {
@@ -593,28 +633,89 @@ document.addEventListener('DOMContentLoaded', () => {
         opt.textContent = `Page ${i + 1}`;
         pdfPageSelect.appendChild(opt);
       }
-      // Default to last page (standard signature page)
+      // Default to last page
       pdfPageSelect.value = (metadata.pageCount - 1).toString();
 
       pdfDropzone.style.display = 'none';
       pdfConfigPanel.style.display = 'flex';
       btnStampPdf.disabled = false;
+
+      // Render visual page preview
+      await updatePdfVisualPreview();
     } catch (err) {
       console.error(err);
       showToast('Could not load PDF document. Is it password protected?', true);
     }
   }
 
+  async function updatePdfVisualPreview(): Promise<void> {
+    if (!currentPdfFile) return;
+    const pageIndex = parseInt(pdfPageSelect.value, 10);
+    await renderPdfPageToCanvas(currentPdfFile, pageIndex + 1, pdfVisualCanvas, 420);
+
+    // Position overlay near bottom-right of rendered page
+    const canvasLeft = pdfVisualCanvas.offsetLeft;
+    const canvasTop = pdfVisualCanvas.offsetTop;
+    const canvasWidth = pdfVisualCanvas.width;
+    const canvasHeight = pdfVisualCanvas.height;
+
+    pdfSigOverlay.style.left = `${canvasLeft + canvasWidth * 0.58}px`;
+    pdfSigOverlay.style.top = `${canvasTop + canvasHeight * 0.72}px`;
+  }
+
+  pdfPageSelect?.addEventListener('change', () => {
+    updatePdfVisualPreview();
+  });
+
+  // Dragging the signature overlay on the visual PDF canvas
+  pdfSigOverlay?.addEventListener('pointerdown', (e) => {
+    isDraggingOverlay = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    overlayStartLeft = pdfSigOverlay.offsetLeft;
+    overlayStartTop = pdfSigOverlay.offsetTop;
+    pdfSigOverlay.setPointerCapture(e.pointerId);
+  });
+
+  pdfSigOverlay?.addEventListener('pointermove', (e) => {
+    if (!isDraggingOverlay) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+
+    const canvasLeft = pdfVisualCanvas.offsetLeft;
+    const canvasTop = pdfVisualCanvas.offsetTop;
+    const minX = canvasLeft;
+    const maxX = canvasLeft + pdfVisualCanvas.width - pdfSigOverlay.offsetWidth;
+    const minY = canvasTop;
+    const maxY = canvasTop + pdfVisualCanvas.height - pdfSigOverlay.offsetHeight;
+
+    const newLeft = Math.max(minX, Math.min(maxX, overlayStartLeft + dx));
+    const newTop = Math.max(minY, Math.min(maxY, overlayStartTop + dy));
+
+    pdfSigOverlay.style.left = `${newLeft}px`;
+    pdfSigOverlay.style.top = `${newTop}px`;
+  });
+
+  const stopOverlayDrag = () => {
+    isDraggingOverlay = false;
+  };
+  pdfSigOverlay?.addEventListener('pointerup', stopOverlayDrag);
+  pdfSigOverlay?.addEventListener('pointercancel', stopOverlayDrag);
+
   pdfScaleSlider?.addEventListener('input', (e) => {
     const val = parseFloat((e.target as HTMLInputElement).value);
     pdfScaleVal.textContent = `${Math.round(val * 100)}%`;
+    const baseW = 140;
+    const baseH = 60;
+    pdfSigOverlay.style.width = `${Math.round(baseW * val)}px`;
+    pdfSigOverlay.style.height = `${Math.round(baseH * val)}px`;
   });
 
   btnStampPdf?.addEventListener('click', async () => {
     if (!currentPdfFile) return;
 
     btnStampPdf.disabled = true;
-    btnStampPdf.textContent = 'Signing PDF...';
+    btnStampPdf.textContent = 'Signing & Certifying PDF...';
 
     const dims = sigCanvas.getCanvasDimensions();
     const sigBlob = await getSignaturePngBlob(sigCanvas.getStrokes(), dims.width, dims.height, config, sigCanvas.getImportedImage());
@@ -626,10 +727,26 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const options: PdfPlacementOptions = {
+    // Calculate relative placement coordinates on the PDF page
+    const canvasLeft = pdfVisualCanvas.offsetLeft;
+    const canvasTop = pdfVisualCanvas.offsetTop;
+    const canvasWidth = pdfVisualCanvas.width;
+    const canvasHeight = pdfVisualCanvas.height;
+
+    const relX = Math.max(0, Math.min(1, (pdfSigOverlay.offsetLeft - canvasLeft) / canvasWidth));
+    const relY = Math.max(0, Math.min(1, (pdfSigOverlay.offsetTop - canvasTop) / canvasHeight));
+    const relWidth = Math.max(0.05, Math.min(1, pdfSigOverlay.offsetWidth / canvasWidth));
+    const relHeight = Math.max(0.02, Math.min(1, pdfSigOverlay.offsetHeight / canvasHeight));
+
+    const options: PdfSignOptions = {
       pageIndex: parseInt(pdfPageSelect.value, 10),
-      position: pdfPlacementSelect.value as any,
-      scale: parseFloat(pdfScaleSlider.value),
+      visualPlacement: { relX, relY, relWidth, relHeight },
+      includeDate: pdfFieldDateToggle?.checked,
+      dateText: pdfFieldDateInput?.value,
+      includeName: pdfFieldNameToggle?.checked,
+      printedName: pdfFieldNameInput?.value,
+      includeAuditCertificate: pdfAuditCertToggle?.checked,
+      signerIdentifier: pdfFieldNameInput?.value || config.typedText,
     };
 
     const result = await stampAndDownloadPdf(currentPdfFile, sigBlob, options);
@@ -642,6 +759,141 @@ document.addEventListener('DOMContentLoaded', () => {
       closePdfModal();
     }
   });
+
+  // Signature Vault Modal & Logic
+  const vaultModal = document.getElementById('vault-modal') as HTMLElement;
+  const btnOpenVault = document.getElementById('btn-open-vault') as HTMLButtonElement;
+  const btnCloseVaultModal = document.getElementById('btn-close-vault-modal') as HTMLButtonElement;
+  const btnCloseVault = document.getElementById('btn-close-vault') as HTMLButtonElement;
+  const vaultItemsContainer = document.getElementById('vault-items-container') as HTMLElement;
+  const vaultSaveLabelInput = document.getElementById('vault-save-label-input') as HTMLInputElement;
+  const btnModalSaveToVault = document.getElementById('btn-modal-save-to-vault') as HTMLButtonElement;
+
+  function renderVaultUI(): void {
+    const items = getVaultItems();
+    vaultItemsContainer.innerHTML = '';
+
+    if (items.length === 0) {
+      vaultItemsContainer.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem;">
+          Your vault is empty. Draw or type a signature and click "Save Current" to store it here.
+        </div>`;
+      return;
+    }
+
+    for (const item of items) {
+      const card = document.createElement('div');
+      card.className = 'vault-item-card';
+      card.innerHTML = `
+        <div class="vault-item-preview">
+          <img src="${item.dataUrl}" alt="${item.label}" />
+        </div>
+        <div class="vault-item-header">
+          <span class="vault-item-title">${item.label}</span>
+          <span class="vault-item-date">${item.createdAt}</span>
+        </div>
+        <div class="vault-item-actions">
+          <button class="btn btn-primary btn-load-vault" data-id="${item.id}" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; flex: 1;">Load</button>
+          <button class="btn btn-danger btn-delete-vault" data-id="${item.id}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Delete</button>
+        </div>
+      `;
+
+      card.querySelector('.btn-load-vault')?.addEventListener('click', async () => {
+        try {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            sigCanvas.setImportedImage(canvas);
+            config.mode = 'scan';
+            sigCanvas.updateConfig({ mode: 'scan' });
+            modeTabScan?.click();
+            updateUIState();
+            vaultModal.style.display = 'none';
+            showToast(`Loaded "${item.label}" from vault!`);
+          };
+          img.src = item.dataUrl;
+        } catch (err) {
+          console.error(err);
+          showToast('Could not load signature from vault.', true);
+        }
+      });
+
+      card.querySelector('.btn-delete-vault')?.addEventListener('click', () => {
+        deleteFromVault(item.id);
+        renderVaultUI();
+        showToast('Deleted signature from vault.');
+      });
+
+      vaultItemsContainer.appendChild(card);
+    }
+  }
+
+  async function handleSaveToVault(customLabel?: string): Promise<void> {
+    const dims = sigCanvas.getCanvasDimensions();
+    const blob = await getSignaturePngBlob(sigCanvas.getStrokes(), dims.width, dims.height, config, sigCanvas.getImportedImage());
+    if (!blob) {
+      showToast('No signature to save.', true);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const label = customLabel || vaultSaveLabelInput.value || (config.mode === 'type' ? config.typedText : 'My Signature');
+      saveToVault(label, dataUrl, config.mode);
+      if (vaultSaveLabelInput) vaultSaveLabelInput.value = '';
+      renderVaultUI();
+      showToast(`Saved "${label}" to vault!`);
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  btnSaveVault?.addEventListener('click', () => {
+    handleSaveToVault();
+  });
+
+  btnModalSaveToVault?.addEventListener('click', () => {
+    handleSaveToVault();
+  });
+
+  btnOpenVault?.addEventListener('click', () => {
+    renderVaultUI();
+    vaultModal.style.display = 'flex';
+  });
+
+  const closeVaultModal = () => {
+    vaultModal.style.display = 'none';
+  };
+  btnCloseVaultModal?.addEventListener('click', closeVaultModal);
+  btnCloseVault?.addEventListener('click', closeVaultModal);
+
+  // Mobile QR Code Modal
+  const qrModal = document.getElementById('qr-modal') as HTMLElement;
+  const btnOpenQr = document.getElementById('btn-open-qr') as HTMLButtonElement;
+  const btnCloseQrModal = document.getElementById('btn-close-qr-modal') as HTMLButtonElement;
+  const btnCloseQr = document.getElementById('btn-close-qr') as HTMLButtonElement;
+  const qrCodeImg = document.getElementById('qr-code-img') as HTMLImageElement;
+
+  btnOpenQr?.addEventListener('click', async () => {
+    try {
+      const qrDataUrl = await generateAppQrCode();
+      qrCodeImg.src = qrDataUrl;
+      qrModal.style.display = 'flex';
+    } catch (err) {
+      console.error(err);
+      showToast('Could not generate QR code.', true);
+    }
+  });
+
+  const closeQrModal = () => {
+    qrModal.style.display = 'none';
+  };
+  btnCloseQrModal?.addEventListener('click', closeQrModal);
+  btnCloseQr?.addEventListener('click', closeQrModal);
 
   // Keyboard Shortcuts
   window.addEventListener('keydown', (e: KeyboardEvent) => {

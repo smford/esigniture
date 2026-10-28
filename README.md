@@ -1,98 +1,114 @@
 # eSignature Studio
 
-> A modern, sleek, client-side digital signature studio built with TypeScript and Vite. Runs 100% in the browser with advanced trackpad/mouse curve smoothing, dynamic pen physics, and vector SVG & high-res raster export.
+> A fast, elegant, and 100% private digital signature studio that runs entirely in your browser. Draw smooth signatures with your mouse or trackpad, type cursive signatures, clean paper photo scans, and stamp PDF contracts visually—with zero server uploads.
 
-🌐 **Live URL:** [http://stephenford.org/esigniture/](http://stephenford.org/esigniture/) (or [https://smford.github.io/esigniture/](https://smford.github.io/esigniture/))
-
----
-
-## ✨ Features
-
-- **100% In-Browser & Private**: Zero data leaves your computer. No backend servers, no analytics, no external tracking.
-- **Draw & Type Modes**:
-  - **Draw Mode**: Freehand drawing with multi-stage curve smoothing and pen dynamics.
-  - **Type to Sign Mode**: Type your name or initials and choose from curated calligraphic handwriting styles (*Caveat*, *Dancing Script*, *Great Vibes*, *Sacramento*) with adjustable sizing.
-- **In-Browser Client-Side PDF Stamping**:
-  - Upload any PDF contract, agreement, or form.
-  - Choose target page (Page 1 through N), position (Bottom Right, Bottom Left, Bottom Center), and scale.
-  - Stamps and downloads the signed PDF directly in the browser—100% private, no server upload.
-- **Physical Signature Scanner & Cleaner**:
-  - Upload a smartphone photo or scan of a handwritten signature on paper.
-  - Automated adaptive thresholding removes off-white paper and camera shadows.
-  - Adjustable threshold and contrast sliders with live canvas preview.
-  - Option to recolor physical ink to match digital palettes (e.g. Classic Navy or Obsidian Black).
-- **Progressive Web App (PWA) & Offline Mode**:
-  - Installable as a native standalone desktop or mobile application.
-  - Fully functional offline via an automated Cache-First Service Worker (`sw.js`).
-  - Zero-Trust Content Security Policy (CSP) enforcing strict client-side data boundaries.
-- **Advanced Jitter & Trackpad Smoothing**:
-  - Sub-frame pointer precision via PointerEvent coalesced events (`getCoalescedEvents()`).
-  - Distance threshold jitter filtering to remove sensor micro-tremors.
-  - Exponential moving average (EMA) coordinate filtering.
-  - Continuous $C^1$ quadratic Bézier curve interpolation via midpoints for organic, natural ink curves.
-- **Dynamic Velocity-Sensitive Pen Physics**:
-  - Simulates fountain and ballpoint pen behavior: fast strokes taper smoothly, slower strokes lay down richer ink.
-  - Full hardware pressure sensitivity support for Apple Pencil, styluses, and Force Touch trackpads.
-- **Multiple High-Resolution Export Formats**:
-  - **SVG**: Crisp, resolution-independent vector graphics with exact path definitions.
-  - **PNG**: 2x supersampled high-DPI raster image with support for transparent or solid backgrounds.
-  - **JPEG**: High quality (0.95 quality) with customizable solid background.
-  - **WebP**: Ultra-efficient modern web format.
-  - **One-Click Clipboard Copy**: Instantly copy transparent PNG to clipboard (`⌘C` or button) for pasting directly into Google Docs, Slack, Word, or Apple Mail.
-- **Customizable Styling**:
-  - **Background options**: Transparent (with checkerboard preview), Pure White, Warm Cream/Paper (`#FAF8F5`), Slate Dark (`#0F172A`), or custom color picker.
-  - **Ink colors**: Obsidian Black, Classic Navy, Royal Blue, Forest Green, Crimson, or custom color picker.
-  - **Stroke thickness**: 1 px to 14 px.
-  - **Smoothing strength**: Adjustable from Raw/Crisp (0%) to Silky Smooth (100%).
-  - **Auto-trim whitespace**: Crops exported file precisely to signature bounding box with comfortable padding.
-  - **Signature baseline guide**: Subtle dashed baseline guide on canvas (automatically omitted in exported files).
-- **Modern Sleek UI**:
-  - Responsive dark/light theme support.
-  - Live document mockup preview showing real-time signature placement on a contract.
-  - Full touch, pen, mouse, and trackpad support (`touch-action: none`).
-  - Keyboard shortcuts:
-    - `⌘Z` / `Ctrl+Z` : Undo
-    - `⇧⌘Z` / `Ctrl+Y` : Redo
-    - `Esc` or `C` : Clear canvas
+🌐 **Live Web App:** [http://stephenford.org/esigniture/](http://stephenford.org/esigniture/) *(or [https://smford.github.io/esigniture/](https://smford.github.io/esigniture/))*  
+📜 **License:** [GNU AGPL-3.0](LICENSE) &bull; **Copyright &copy; 2026 smford**
 
 ---
 
-## 📐 Mathematical Smoothing Pipeline
+## 🎯 The Problems This Tool Solves
 
-When drawing with a mouse or trackpad, input events suffer from low sampling frequency and discrete quantization. The app eliminates jaggedness through a multi-stage pipeline:
+Signing documents digitally today is surprisingly frustrating and fraught with privacy risks:
 
-1. **Jitter Rejection Filter**:
-   $$\text{dist}(P_{curr}, P_{prev}) < \epsilon \implies \text{drop}$$
-2. **Exponential Moving Average (EMA)**:
-   $$S_i = S_{i-1} + \alpha \cdot (P_i - S_{i-1})$$
-   where $\alpha \in [0.25, 1.0]$ scales with user-selected smoothing intensity.
-3. **Rolling Velocity & Width Modulation**:
-   $$v_i = 0.6 \cdot v_{i-1} + 0.4 \cdot \frac{\Delta d}{\Delta t}$$
-   $$w_i = w_{base} \cdot \left(1.25 - 0.65 \cdot \min\left(1, \frac{v_i}{v_{max}}\right)\right)$$
-4. **Midpoint Quadratic Spline**:
-   For smoothed coordinates $P_0, \dots, P_n$, control points and midpoints $M_i = \frac{P_i + P_{i+1}}{2}$ form smooth curves:
-   $$B(t) = (1-t)^2 M_{i-1} + 2(1-t)t P_i + t^2 M_i$$
+1. **Ugly, Jagged Lines from Mice and Trackpads**: Drawing a signature with a mouse or trackpad normally produces robotic, stepped, jagged lines due to low sensor polling rates and hand tremors.
+2. **Cloud Privacy & Security Risks**: Most commercial e-signature platforms require you to upload confidential legal agreements, NDAs, financial contracts, and tax documents to their corporate cloud servers. You lose custody of your sensitive files and biometric signature data.
+3. **Expensive Subscriptions & Paywalls**: Many tools limit how many documents you can sign per month or charge hefty recurring subscription fees just to place an image on a PDF.
+4. **Clunky Mobile-to-Desktop Transitions**: When you need to sign a PDF on your laptop, drawing with a mouse is awkward, but transferring documents back and forth to your phone or tablet is tedious.
+
+---
+
+## 🔒 Why eSignature Studio Is Truly Secure
+
+* **100% Local & Client-Side Execution**: Every mathematical curve calculation, pixel thresholding pass, PDF rendering, and document modification happens **exclusively inside your local browser memory**.
+* **Zero Server Transmission**: No files, signatures, IP logs, or biometrics are ever sent to external servers or cloud databases. There is no backend server.
+* **Works Completely Offline (PWA)**: Equipped with a Cache-First Service Worker. You can disconnect your internet completely (e.g., Airplane mode) and every feature continues to function smoothly.
+* **Cryptographic Tamper-Proof Audit Trail**: Calculates SHA-256 cryptographic hashes of your original documents and appends an optional verifiable **Certificate of Completion** to the signed PDF.
+* **Strict Content Security Policy (CSP)**: Built with browser-level security policies that prevent external script injection and unauthorized network requests.
+* **Free & Open Source (AGPL-3.0)**: Fully auditable, open source code under the copyleft GNU Affero General Public License.
+
+---
+
+## ✨ Key Features That Make This Tool the Best Choice
+
+### 1. 🖊️ Intelligent Trackpad & Mouse Curve Smoothing
+* **Sub-Frame Coalesced Pointer Events**: Captures high-frequency micro-movements between animation frames.
+* **Multi-Stage Smoothing Pipeline**: Filters out sensor jitter and applies continuous Exponential Moving Average (EMA) smoothing.
+* **Midpoint Quadratic Bézier Splines**: Guarantees organic, continuous $C^1$ curves without sharp angles.
+* **Dynamic Velocity Pen Physics**: Mimics a real fountain pen—fast strokes taper gracefully, while deliberate strokes produce rich, full ink. Supports hardware stylus pressure (Apple Pencil, Surface Pen).
+
+### 2. 📄 Visual Drag-and-Drop PDF Signer
+* Drop any PDF contract, agreement, or form into the studio.
+* Previews document pages directly in your browser.
+* **Click, drag, and resize** your signature overlay to the exact signature line on any page.
+* Add complementary fields in one click:
+  * **Automatic Date Stamp** (`YYYY-MM-DD` or customized)
+  * **Printed Full Name / Title** (e.g., `Jane Doe, Director`)
+  * **Cryptographic SHA-256 Audit Seal**
+* Download the stamped PDF instantly—**100% client-side**.
+
+### 3. ✍️ Type-to-Sign (Cursive Calligraphy)
+* Don't have a pen or mouse handy? Type your name or initials and choose from curated calligraphic handwriting fonts (*Caveat*, *Dancing Script*, *Great Vibes*, *Sacramento*).
+* Live font sizing and color matching.
+
+### 4. 📷 Physical Signature Scanner & Background Cleaner
+* Snap a photo of your handwritten signature on paper with your phone and upload it.
+* Client-side adaptive luminance thresholding automatically strips the off-white paper and camera shadows, leaving only clean, transparent ink.
+* Adjustable threshold and contrast sliders with live preview, with optional ink recoloring to match chosen digital palettes.
+
+### 5. 🔐 Encrypted Local Signature Vault
+* Save multiple signature profiles (e.g., "Full Legal Signature", "My Initials", "Stamp") into your browser's private local vault.
+* One-click recall and loading whenever you return to the app.
+
+### 6. 📱 Cross-Device Mobile Relay (Sign on Phone)
+* Working on a desktop or laptop? Click **"Sign on Mobile"** to display a QR code.
+* Scan the code with your smartphone or iPad camera to draw comfortably using your finger or stylus—no app installation needed.
+
+### 7. 💾 Multiple High-Resolution Export Formats
+* **SVG**: Infinite scalable vector graphics for crisp printing at any resolution.
+* **PNG**: 2x supersampled high-DPI raster images with transparent, pure white, warm parchment, or dark slate backgrounds.
+* **JPEG & WebP**: High-quality compressed formats.
+* **One-Click Clipboard Copy**: Instantly copy your signature directly to your system clipboard to paste into Google Docs, Apple Mail, Word, or Slack.
+* **Auto-Trim Whitespace**: Automatically crops exported files to the signature bounds with balanced padding.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> | Undo last stroke |
+| <kbd>⇧⌘Z</kbd> / <kbd>Ctrl+Y</kbd> | Redo stroke |
+| <kbd>Esc</kbd> or <kbd>C</kbd> | Clear canvas / reset input |
 
 ---
 
 ## 🛠️ Development & Testing
 
 ```bash
+# Clone repository
+git clone https://github.com/smford/esigniture.git
+cd esigniture
+
 # Install dependencies
 npm install
 
-# Run unit tests
+# Run automated test suite
 npm test
 
-# Start local development server
+# Launch local dev server
 npm run dev
 
-# Build production assets
+# Build production bundle
 npm run build
 ```
 
 ---
 
-## 🚀 Continuous Deployment
+## ⚖️ License & Copyright
 
-The repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that runs automated tests and deploys production builds directly to GitHub Pages on every push to `main`.
+Copyright &copy; 2026 **smford**.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the **GNU Affero General Public License (AGPL-3.0)** as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+See the [LICENSE](LICENSE) file for details.
