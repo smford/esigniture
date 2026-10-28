@@ -6,7 +6,7 @@
     <title>eSignature Studio | Smooth In-Browser Vector & PNG Signature Generator</title>
     <meta name="description" content="Draw, smooth, and export beautiful digital signatures purely in the browser. Zero server uploads, SVG & PNG downloads, trackpad jitter smoothing, custom background colors." />
     <meta name="theme-color" content="#2563eb" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' data: blob:; worker-src 'self' blob:; manifest-src 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' data: blob: https://0.peerjs.com wss://0.peerjs.com https://*.peerjs.com wss://*.peerjs.com; worker-src 'self' blob:; manifest-src 'self';" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Dancing+Script:wght@600&family=Great+Vibes&family=Sacramento&display=swap" rel="stylesheet" />
@@ -473,11 +473,54 @@
           <div style="padding: 0.75rem; background: white; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: inline-block;">
             <img id="qr-code-img" alt="QR Code" style="width: 220px; height: 220px; display: block;" />
           </div>
-          <span style="font-size: 0.78rem; color: var(--text-muted);">Zero installation required &bull; Works in any mobile browser</span>
+          <div id="qr-modal-status" class="privacy-pill" style="color: #2563eb; background: rgba(37, 99, 235, 0.1); border-color: rgba(37, 99, 235, 0.2);">
+            <span id="qr-status-dot">●</span> <span id="qr-status-text">Waiting for device scan...</span>
+          </div>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Direct P2P WebRTC &bull; Zero Server Storage &bull; End-to-End Encrypted</span>
         </div>
 
         <div class="modal-footer" style="justify-content: center;">
-          <button id="btn-close-qr" class="btn">Done</button>
+          <button id="btn-close-qr" class="btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Signing Pad View (Shown when scanned by phone / tablet) -->
+    <div id="mobile-signing-view" class="mobile-pad-fullscreen" style="display: none;">
+      <header class="mobile-pad-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-weight: 700; font-size: 1rem;">Sign on Device</span>
+        </div>
+        <div id="mobile-conn-badge" class="privacy-pill" style="color: #eab308; background: rgba(234, 179, 8, 0.1); border-color: rgba(234, 179, 8, 0.2);">
+          <span>●</span> <span id="mobile-conn-text">Connecting...</span>
+        </div>
+      </header>
+
+      <div class="mobile-pad-canvas-wrapper">
+        <canvas id="mobile-signature-canvas"></canvas>
+        <div id="mobile-canvas-hint" class="canvas-hint">
+          <span style="font-size: 0.95rem; font-weight: 500;">Draw your signature here with finger or stylus</span>
+        </div>
+      </div>
+
+      <footer class="mobile-pad-footer">
+        <button id="btn-mobile-clear" class="btn btn-danger" style="padding: 0.75rem 1.25rem;">
+          Clear
+        </button>
+        <button id="btn-mobile-send" class="btn btn-primary" style="padding: 0.75rem 1.5rem; flex: 1; font-size: 1rem; justify-content: center;" disabled>
+          <span>Send to Computer ✓</span>
+        </button>
+      </footer>
+
+      <!-- Mobile Sent Success Overlay -->
+      <div id="mobile-sent-overlay" class="mobile-sent-screen" style="display: none;">
+        <div class="mobile-sent-card">
+          <div style="font-size: 3rem; color: #10b981; margin-bottom: 0.5rem;">✓</div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">Signature Transferred!</h2>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+            Your signature has been securely sent directly to your computer. You may now close this tab.
+          </p>
+          <button id="btn-mobile-sign-again" class="btn" style="width: 100%; justify-content: center;">Sign Again</button>
         </div>
       </div>
     </div>

@@ -60,9 +60,11 @@ Signing documents digitally today is surprisingly frustrating and fraught with p
 * Save multiple signature profiles (e.g., "Full Legal Signature", "My Initials", "Stamp") into your browser's private local vault.
 * One-click recall and loading whenever you return to the app.
 
-### 6. 📱 Cross-Device Mobile Relay (Sign on Phone)
-* Working on a desktop or laptop? Click **"Sign on Mobile"** to display a QR code.
-* Scan the code with your smartphone or iPad camera to draw comfortably using your finger or stylus—no app installation needed.
+### 6. 📱 Real-Time Cross-Device Relay (Sign on Phone ➔ Desktop)
+* Working on a desktop or laptop? Click **"Sign on Mobile"** in the top bar to display a QR code.
+* Scan the code with your smartphone or tablet camera to open a dedicated, full-screen mobile drawing pad.
+* Draw smoothly with your finger or Apple Pencil, then tap **"Send to Computer"**.
+* The signature **instantly transfers in real-time** over an encrypted peer-to-peer WebRTC DataChannel directly onto your desktop canvas—with zero cloud storage or intermediary servers!
 
 ### 7. 💾 Multiple High-Resolution Export Formats
 * **SVG**: Infinite scalable vector graphics for crisp printing at any resolution.

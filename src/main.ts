@@ -8,6 +8,7 @@ import { renderPdfPageToCanvas } from './engine/pdfRenderer';
 import { processSignatureImage, loadImageFromFile, CleanerOptions } from './engine/signatureCleaner';
 import { getVaultItems, saveToVault, deleteFromVault } from './engine/signatureVault';
 import { generateAppQrCode } from './engine/qrGenerator';
+import { createDesktopRelay, connectMobileToDesktop, DesktopRelaySession, MobileRelayClient } from './engine/relay';
 import { Icons } from './ui/icons';
 
 // Initialize UI Icons
@@ -88,6 +89,15 @@ const config: SignatureConfig = {
 // Main Initialization
 document.addEventListener('DOMContentLoaded', () => {
   injectIcons();
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetSession = urlParams.get('session');
+  const role = urlParams.get('role');
+
+  if (role === 'mobile' && targetSession) {
+    initMobileSigningMode(targetSession);
+    return;
+  }
 
   const canvasEl = document.getElementById('signature-canvas') as HTMLCanvasElement;
   const canvasContainer = document.getElementById('canvas-container') as HTMLElement;
@@ -871,25 +881,78 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCloseVaultModal?.addEventListener('click', closeVaultModal);
   btnCloseVault?.addEventListener('click', closeVaultModal);
 
-  // Mobile QR Code Modal
+  // Mobile QR Code Modal & P2P Relay
   const qrModal = document.getElementById('qr-modal') as HTMLElement;
   const btnOpenQr = document.getElementById('btn-open-qr') as HTMLButtonElement;
   const btnCloseQrModal = document.getElementById('btn-close-qr-modal') as HTMLButtonElement;
   const btnCloseQr = document.getElementById('btn-close-qr') as HTMLButtonElement;
   const qrCodeImg = document.getElementById('qr-code-img') as HTMLImageElement;
+  const qrModalStatus = document.getElementById('qr-modal-status') as HTMLElement;
+  const qrStatusText = document.getElementById('qr-status-text') as HTMLElement;
+  const qrStatusDot = document.getElementById('qr-status-dot') as HTMLElement;
+
+  let desktopRelay: DesktopRelaySession | null = null;
 
   btnOpenQr?.addEventListener('click', async () => {
+    if (desktopRelay) {
+      desktopRelay.close();
+      desktopRelay = null;
+    }
+    qrModal.style.display = 'flex';
+    if (qrStatusText) qrStatusText.textContent = 'Initializing P2P Session...';
+    if (qrStatusDot) qrStatusDot.style.color = '#eab308';
+
     try {
-      const qrDataUrl = await generateAppQrCode();
+      desktopRelay = await createDesktopRelay(
+        () => {
+          // Device connected over WebRTC DataChannel
+          if (qrStatusText) qrStatusText.textContent = 'Phone Connected! Draw on phone to transfer.';
+          if (qrStatusDot) qrStatusDot.style.color = '#10b981';
+          if (qrModalStatus) {
+            qrModalStatus.style.color = '#10b981';
+            qrModalStatus.style.background = 'rgba(16, 185, 129, 0.1)';
+            qrModalStatus.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+          }
+          showToast('Mobile phone connected via WebRTC!');
+        },
+        (payload) => {
+          // Signature received from phone
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            sigCanvas.setImportedImage(canvas);
+            config.mode = 'scan';
+            sigCanvas.updateConfig({ mode: 'scan' });
+            modeTabScan?.click();
+            updateUIState();
+            closeQrModal();
+            showToast('Signature received from mobile device!');
+          };
+          img.src = payload.dataUrl;
+        }
+      );
+
+      const qrDataUrl = await generateAppQrCode(desktopRelay.mobileUrl);
       qrCodeImg.src = qrDataUrl;
-      qrModal.style.display = 'flex';
+      if (qrStatusText) qrStatusText.textContent = 'Scan QR code with phone camera';
+      if (qrStatusDot) qrStatusDot.style.color = '#2563eb';
     } catch (err) {
       console.error(err);
-      showToast('Could not generate QR code.', true);
+      if (qrStatusText) qrStatusText.textContent = 'Scan QR code to open mobile studio';
+      const fallbackUrl = await generateAppQrCode();
+      qrCodeImg.src = fallbackUrl;
     }
   });
 
   const closeQrModal = () => {
+    if (desktopRelay) {
+      desktopRelay.close();
+      desktopRelay = null;
+    }
     qrModal.style.display = 'none';
   };
   btnCloseQrModal?.addEventListener('click', closeQrModal);
@@ -1013,3 +1076,116 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial UI state setup
   updateUIState();
 });
+
+// Dedicated Mobile Signing Pad Mode (Activated via QR Code Scan)
+function initMobileSigningMode(targetSession: string): void {
+  // Hide desktop UI sections
+  const header = document.querySelector('.app-header') as HTMLElement;
+  const container = document.querySelector('.app-container') as HTMLElement;
+  const footer = document.querySelector('.app-footer') as HTMLElement;
+  if (header) header.style.display = 'none';
+  if (container) container.style.display = 'none';
+  if (footer) footer.style.display = 'none';
+
+  const mobileView = document.getElementById('mobile-signing-view') as HTMLElement;
+  if (mobileView) mobileView.style.display = 'flex';
+
+  const mobileCanvasEl = document.getElementById('mobile-signature-canvas') as HTMLCanvasElement;
+  const mobileCanvasHint = document.getElementById('mobile-canvas-hint') as HTMLElement;
+  const btnMobileClear = document.getElementById('btn-mobile-clear') as HTMLButtonElement;
+  const btnMobileSend = document.getElementById('btn-mobile-send') as HTMLButtonElement;
+  const mobileConnBadge = document.getElementById('mobile-conn-badge') as HTMLElement;
+  const mobileConnText = document.getElementById('mobile-conn-text') as HTMLElement;
+  const mobileSentOverlay = document.getElementById('mobile-sent-overlay') as HTMLElement;
+  const btnSignAgain = document.getElementById('btn-mobile-sign-again') as HTMLButtonElement;
+
+  const mobileConfig: SignatureConfig = {
+    ...config,
+    strokeColor: '#0f172a',
+    strokeWidth: 3.5,
+    backgroundColor: '',
+    backgroundType: 'transparent',
+    smoothingFactor: 0.65,
+    dynamicPressure: true,
+  };
+
+  const mobileCanvas = new SignatureCanvas({
+    canvas: mobileCanvasEl,
+    config: mobileConfig,
+    onChange: () => {
+      const empty = mobileCanvas.isEmpty();
+      if (mobileCanvasHint) {
+        if (empty) mobileCanvasHint.classList.remove('hidden');
+        else mobileCanvasHint.classList.add('hidden');
+      }
+      if (btnMobileSend) {
+        btnMobileSend.disabled = empty;
+      }
+    },
+  });
+
+  btnMobileClear?.addEventListener('click', () => {
+    mobileCanvas.clear();
+  });
+
+  let mobileClient: MobileRelayClient | null = null;
+
+  try {
+    mobileClient = connectMobileToDesktop(
+      targetSession,
+      () => {
+        // Connected to desktop!
+        if (mobileConnText) mobileConnText.textContent = 'Connected to Computer';
+        if (mobileConnBadge) {
+          mobileConnBadge.style.color = '#10b981';
+          mobileConnBadge.style.background = 'rgba(16, 185, 129, 0.1)';
+          mobileConnBadge.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+        }
+      },
+      () => {
+        if (mobileConnText) mobileConnText.textContent = 'Disconnected';
+      }
+    );
+  } catch (err) {
+    console.error('Failed to connect mobile client:', err);
+  }
+
+  btnMobileSend?.addEventListener('click', async () => {
+    if (mobileCanvas.isEmpty() || !mobileClient) return;
+
+    btnMobileSend.disabled = true;
+    btnMobileSend.textContent = 'Sending...';
+
+    const dims = mobileCanvas.getCanvasDimensions();
+    const blob = await getSignaturePngBlob(mobileCanvas.getStrokes(), dims.width, dims.height, mobileConfig);
+
+    if (!blob) {
+      btnMobileSend.disabled = false;
+      btnMobileSend.textContent = 'Send to Computer ✓';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const sent = await mobileClient!.sendSignature(dataUrl, mobileCanvas.getStrokes());
+      if (sent) {
+        if (mobileSentOverlay) mobileSentOverlay.style.display = 'flex';
+      } else {
+        alert('Could not transfer signature. Please check connection and try again.');
+        btnMobileSend.disabled = false;
+        btnMobileSend.textContent = 'Send to Computer ✓';
+      }
+    };
+    reader.readAsDataURL(blob);
+  });
+
+  btnSignAgain?.addEventListener('click', () => {
+    mobileCanvas.clear();
+    if (mobileSentOverlay) mobileSentOverlay.style.display = 'none';
+    if (btnMobileSend) {
+      btnMobileSend.disabled = true;
+      btnMobileSend.textContent = 'Send to Computer ✓';
+    }
+  });
+}
