@@ -13,8 +13,8 @@
     <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
     <link rel="apple-touch-icon" href="./icons/icon.svg" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <script type="module" crossorigin src="./assets/index-B7Y7P2bB.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-sgaUWSsk.css">
+    <script type="module" crossorigin src="./assets/index-CZzu0VU1.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BTx3rahy.css">
   </head>
   <body>
     <!-- App Header -->
@@ -28,6 +28,12 @@
         </div>
       </div>
       <div class="header-actions">
+        <button id="btn-open-qr" class="btn" style="padding: 0.4rem 0.65rem;" title="Scan QR code to draw smoothly on Phone or Tablet">
+          <span id="qr-icon"></span> <span>Sign on Mobile</span>
+        </button>
+        <button id="btn-open-vault" class="btn" style="padding: 0.4rem 0.65rem;" title="Access your saved signatures vault">
+          <span id="vault-icon"></span> <span>Vault</span>
+        </button>
         <button id="btn-install" class="btn" style="display: none; padding: 0.4rem 0.75rem;" title="Install eSignature Studio as an offline Desktop/Mobile App">
           <span id="install-icon"></span> <span>Install App</span>
         </button>
@@ -252,6 +258,9 @@
               <button id="btn-redo" class="btn" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>
                 <span id="redo-icon"></span> Redo
               </button>
+              <button id="btn-save-vault" class="btn" title="Save this signature to your encrypted local vault" disabled>
+                <span id="save-icon"></span> Save
+              </button>
               <button id="btn-clear" class="btn btn-danger" title="Clear Canvas (C)" disabled>
                 <span id="trash-icon"></span> Clear
               </button>
@@ -340,6 +349,21 @@
               <button id="btn-change-pdf" class="btn" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;">Change</button>
             </div>
 
+            <!-- Interactive Visual Placement Canvas -->
+            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: 600;">
+                <span>Drag Signature to Exact Position on Page:</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">Click &amp; drag box below</span>
+              </div>
+              <div id="pdf-visual-container" class="pdf-page-container">
+                <canvas id="pdf-visual-canvas"></canvas>
+                <div id="pdf-sig-overlay" class="pdf-sig-movable" title="Drag me to position signature">
+                  <img id="pdf-sig-overlay-img" alt="signature" />
+                  <span class="drag-handle-hint">⠿ Move</span>
+                </div>
+              </div>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
               <div class="slider-group">
                 <label class="slider-header" for="pdf-page-select">
@@ -351,23 +375,38 @@
               </div>
 
               <div class="slider-group">
-                <label class="slider-header" for="pdf-placement-select">
-                  <span>Signature Position</span>
-                </label>
-                <select id="pdf-placement-select" class="text-input" style="padding: 0.45rem;">
-                  <option value="bottom-right">Bottom Right</option>
-                  <option value="bottom-left">Bottom Left</option>
-                  <option value="bottom-center">Bottom Center</option>
-                </select>
+                <div class="slider-header">
+                  <span>Signature Scale</span>
+                  <span class="val" id="pdf-scale-val">100%</span>
+                </div>
+                <input type="range" id="pdf-scale-slider" min="0.4" max="1.8" step="0.05" value="1.0" />
               </div>
             </div>
 
-            <div class="slider-group">
-              <div class="slider-header">
-                <span>Signature Scale</span>
-                <span class="val" id="pdf-scale-val">100%</span>
+            <!-- Multi-Field Options -->
+            <div style="border-top: 1px solid var(--border-color); padding-top: 0.85rem; display: flex; flex-direction: column; gap: 0.6rem;">
+              <span class="section-title" style="margin: 0;">Multi-Field Stamping &amp; Audit Seal</span>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="pdf-field-date-toggle" checked />
+                  <span>Include Date Stamp</span>
+                </label>
+                <input type="text" id="pdf-field-date-input" class="text-input" style="padding: 0.35rem 0.5rem; font-size: 0.8rem;" value="" />
               </div>
-              <input type="range" id="pdf-scale-slider" min="0.5" max="1.8" step="0.1" value="1.0" />
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="pdf-field-name-toggle" />
+                  <span>Include Printed Name</span>
+                </label>
+                <input type="text" id="pdf-field-name-input" class="text-input" style="padding: 0.35rem 0.5rem; font-size: 0.8rem;" placeholder="e.g. Jane Doe, CEO" />
+              </div>
+
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; margin-top: 0.25rem;">
+                <input type="checkbox" id="pdf-audit-certificate-toggle" checked />
+                <span>Append Cryptographic Audit Certificate (SHA-256 Seal)</span>
+              </label>
             </div>
           </div>
         </div>
@@ -381,14 +420,80 @@
       </div>
     </div>
 
+    <!-- Saved Signatures Vault Modal -->
+    <div id="vault-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span id="modal-vault-icon" style="color: var(--primary);"></span>
+            <h2 style="font-size: 1.15rem; font-weight: 700;">Signature Vault</h2>
+          </div>
+          <button id="btn-close-vault-modal" class="icon-btn" style="border: none;" title="Close" aria-label="Close">
+            <span id="close-vault-icon"></span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Quickly recall your saved signatures, initials, or stamps. Stored securely in your browser's private local vault.
+          </p>
+
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+            <input type="text" id="vault-save-label-input" class="text-input" placeholder="Signature label (e.g. Formal Legal, Initials)" />
+            <button id="btn-modal-save-to-vault" class="btn btn-primary" style="white-space: nowrap;">Save Current</button>
+          </div>
+
+          <div id="vault-items-container" class="vault-items-grid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btn-close-vault" class="btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile QR Code Modal -->
+    <div id="qr-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-card" style="max-width: 420px; text-align: center;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span id="modal-qr-icon" style="color: var(--primary);"></span>
+            <h2 style="font-size: 1.15rem; font-weight: 700;">Sign with Phone or Tablet</h2>
+          </div>
+          <button id="btn-close-qr-modal" class="icon-btn" style="border: none;" title="Close" aria-label="Close">
+            <span id="close-qr-icon"></span>
+          </button>
+        </div>
+
+        <div class="modal-body" style="align-items: center; gap: 1rem;">
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Point your smartphone or iPad camera at the QR code below to draw with your finger, Apple Pencil, or stylus:
+          </p>
+          <div style="padding: 0.75rem; background: white; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: inline-block;">
+            <img id="qr-code-img" alt="QR Code" style="width: 220px; height: 220px; display: block;" />
+          </div>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Zero installation required &bull; Works in any mobile browser</span>
+        </div>
+
+        <div class="modal-footer" style="justify-content: center;">
+          <button id="btn-close-qr" class="btn">Done</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Floating Toasts -->
     <div class="toast-container" id="toast-container"></div>
 
     <!-- Footer -->
     <footer class="app-footer">
-      <p>
-        <strong>eSignature Studio</strong> &bull; Purely client-side &amp; private &bull;
+      <p style="margin-bottom: 0.4rem;">
+        <strong>eSignature Studio</strong> &bull; Purely client-side, zero-knowledge &amp; private &bull;
         Shortcuts: <kbd class="kbd-shortcut">⌘Z</kbd> Undo &bull; <kbd class="kbd-shortcut">⇧⌘Z</kbd> Redo &bull; <kbd class="kbd-shortcut">Esc / C</kbd> Clear
+      </p>
+      <p style="font-size: 0.75rem; color: var(--text-muted);">
+        Copyright &copy; 2026 smford. Released under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU AGPL-3.0 License</a>.
       </p>
     </footer>
 
