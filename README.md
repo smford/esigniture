@@ -22,7 +22,7 @@ Signing documents digitally today is surprisingly frustrating and fraught with p
 
 * **100% Local & Client-Side Execution**: Every mathematical curve calculation, pixel thresholding pass, PDF rendering, and document modification happens **exclusively inside your local browser memory**.
 * **Zero Server Transmission**: No files, signatures, IP logs, or biometrics are ever sent to external servers or cloud databases. There is no backend server.
-* **Works Completely Offline (PWA)**: Equipped with a Cache-First Service Worker. You can disconnect your internet completely (e.g., Airplane mode) and every feature continues to function smoothly.
+* **Works Completely Offline & Auto-Updates (PWA)**: Equipped with a Cache-First Service Worker. Installed PWAs auto-detect new versions on focus, trigger immediate background updates via `skipWaiting()`, and reload seamlessly without manual intervention.
 * **Cryptographic Tamper-Proof Audit Trail**: Calculates SHA-256 cryptographic hashes of your original documents and appends an optional verifiable **Certificate of Completion** to the signed PDF.
 * **Strict Content Security Policy (CSP)**: Built with browser-level security policies that prevent external script injection and unauthorized network requests.
 * **Free & Open Source (AGPL-3.0)**: Fully auditable, open source code under the copyleft GNU Affero General Public License.

@@ -962,21 +962,48 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Offline mode active. All drawing & export features work 100% offline!');
   });
 
-  // Service Worker Registration for PWA & Offline Support
+  // Service Worker Registration with Seamless Auto-Update for PWA
   if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+    // Reload automatically when the new service worker claims control
+    let isRefreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        window.location.reload();
+      }
+    });
+
     navigator.serviceWorker
       .register('./sw.js')
       .then((reg) => {
-        reg.onupdatefound = () => {
+        // If a worker is already waiting, trigger its immediate takeover
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+
+        reg.addEventListener('updatefound', () => {
           const installing = reg.installing;
           if (installing) {
-            installing.onstatechange = () => {
+            installing.addEventListener('statechange', () => {
               if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-                showToast('Updated version ready. Refresh to update!');
+                showToast('New version detected. Updating eSignature Studio...');
+                installing.postMessage({ type: 'SKIP_WAITING' });
               }
-            };
+            });
           }
-        };
+        });
+
+        // Check for updates whenever app comes back into focus
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            reg.update().catch(() => {});
+          }
+        });
+
+        // Periodic check for updates every 15 minutes
+        setInterval(() => {
+          reg.update().catch(() => {});
+        }, 15 * 60 * 1000);
       })
       .catch((err) => {
         console.warn('Service Worker registration skipped or failed:', err);
